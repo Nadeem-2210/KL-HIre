@@ -1,0 +1,44 @@
+{
+  "name": "backend",
+  "version": "1.0.2",
+  "description": "Render deployment cache bust - equal weightage scoring fix",
+  "main": "index.js",
+  "scripts": {
+    "dev": "nodemon src/server.js",
+    "start": "node src/server.js",
+    "postinstall": "puppeteer browsers install chrome",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.1015.0",
+    "axios": "^1.13.6",
+    "bcryptjs": "^3.0.3",
+    "cors": "^2.8.6",
+    "dotenv": "^17.3.1",
+    "express": "^5.2.1",
+    "express-validator": "^7.3.1",
+    "form-data": "^4.0.5",
+    "groq-sdk": "^1.1.2",
+    "helmet": "^8.1.0",
+    "jsonwebtoken": "^9.0.3",
+    "mammoth": "^1.12.0",
+    "mongodb-memory-server": "^11.0.1",
+    "mongoose": "^8.12.1",
+    "morgan": "^1.10.1",
+    "multer": "^2.1.1",
+    "multer-s3": "^3.0.1",
+    "openai": "^6.32.0",
+    "pdf-parse": "^2.4.5",
+    "pdfkit": "^0.18.0",
+    "puppeteer": "^24.40.0",
+    "uuid": "^13.0.0",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.14"
+  }
+}
