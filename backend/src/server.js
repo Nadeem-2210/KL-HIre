@@ -82,6 +82,30 @@ const start = async () => {
   try {
     await connectDB();
     
+    // Run safe one-off database migration check for existing documents
+    try {
+      const CodingQuestion = require('./models/CodingQuestion');
+      const Job = require('./models/Job');
+      
+      const qResult = await CodingQuestion.updateMany(
+        { domain: { $exists: false } },
+        { $set: { domain: 'All' } }
+      );
+      if (qResult.modifiedCount > 0) {
+        console.log(`[DB Migration] Migrated ${qResult.modifiedCount} CodingQuestion documents.`);
+      }
+
+      const jobResult = await Job.updateMany(
+        { codingDifficulty: { $exists: false } },
+        { $set: { codingDifficulty: 'mixed' } }
+      );
+      if (jobResult.modifiedCount > 0) {
+        console.log(`[DB Migration] Migrated ${jobResult.modifiedCount} Job documents.`);
+      }
+    } catch (migErr) {
+      console.warn(`[Warning] Database startup migration skipped/failed: ${migErr.message}`);
+    }
+    
     // Ensure directories exist (wrapped in try-catch for read-only environments like Vercel)
     const dirs = ['uploads/reports', 'uploads/temp'];
     dirs.forEach(d => {

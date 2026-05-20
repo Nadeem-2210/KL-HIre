@@ -77,7 +77,7 @@ const CodeEvalRound = () => {
         const { data: appData } = await api.get('/applications/my');
         const app = (appData.data || []).find(a => a._id === appId);
         if (!app) { setError('Application not found.'); setLoading(false); return; }
-        if (jobSkipsCodingRound(app.jobId?.domain)) {
+        if (jobSkipsCodingRound(app.jobId)) {
           setError('This role does not include a coding round. Return to your dashboard.');
           setLoading(false);
           return;

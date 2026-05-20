@@ -38,6 +38,11 @@ const codingQuestionSchema = new mongoose.Schema(
       enum: ['easy', 'medium', 'hard'],
       default: 'medium',
     },
+    domain: {
+      type: String,
+      default: 'All',
+      trim: true,
+    },
 
     // ─── Signature & Mode ──────────────────────────────────────────────────
     signature: {

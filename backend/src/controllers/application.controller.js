@@ -238,7 +238,7 @@ exports.submitMCQ = async (req, res) => {
     application.scores.mcq = { score, answers: evaluatedAnswers };
 
     const jobDomain = application.jobId?.domain;
-    if (isPassed && skipsCodingRound(jobDomain)) {
+    if (isPassed && (skipsCodingRound(application.jobId) || skipsCodingRound(jobDomain))) {
       application.scores.coding = { score: 0 };
       application.scores.finalScore = finalScoreFromApplication(application, 0);
       application.status = 'coding_passed';

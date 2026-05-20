@@ -119,7 +119,7 @@ const ApplicationFlow = () => {
               </div>
             )}
 
-            {!jobSkipsCodingRound(job?.domain) && (application.status === 'coding_pending' || application.status.includes('coding_pass') || application.status.includes('coding_fail')) && (
+            {!jobSkipsCodingRound(job) && (application.status === 'coding_pending' || application.status.includes('coding_pass') || application.status.includes('coding_fail')) && (
               <div className="alert" style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)' }}>
                 <strong>Coding Round:</strong>
                 {application.status === 'coding_pending' && (
