@@ -21,6 +21,15 @@ const protect = async (req, res, next) => {
     if (!req.user) {
       return res.status(401).json({ success: false, message: 'User not found' });
     }
+    if (!req.user.isActive) {
+      return res.status(403).json({ success: false, message: 'Your account is deactivated' });
+    }
+    if (req.user.role === 'candidate' && req.user.status !== 'approved') {
+      const msg = req.user.status === 'pending'
+        ? 'Your account is waiting for admin approval'
+        : 'Your account has been rejected';
+      return res.status(403).json({ success: false, message: msg });
+    }
     next();
   } catch (error) {
     next(error);

@@ -63,12 +63,6 @@ const CandidateRegister = () => {
       return setError(`Invalid email domain. Only @gmail.com, @outlook.com, or @kadellabs.com are allowed.`);
     }
 
-    if (form.password !== form.confirmPassword) {
-      return setError('Passwords do not match');
-    }
-    if (form.password.length < 6) {
-      return setError('Password must be at least 6 characters');
-    }
     if (!form.domain) {
       return setError('Please select your domain');
     }
@@ -78,19 +72,13 @@ const CandidateRegister = () => {
 
     setLoading(true);
     try {
-      // Step 1: Register the user account
       const { data: regData } = await api.post('/auth/register', {
         name: form.name,
         email: form.email,
-        password: form.password,
         role: 'candidate',
         domain: form.domain,
         experience: form.experience,
       });
-
-      // Store token with candidate-specific scope
-      localStorage.setItem('token_candidate', regData.token);
-      localStorage.setItem('user_candidate', JSON.stringify(regData.user));
 
       setStep(2); // show success screen
     } catch (err) {
@@ -116,22 +104,19 @@ const CandidateRegister = () => {
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             fontSize: 36, margin: '0 auto 20px',
           }}>🎉</div>
-          <h2 style={{ fontSize: '1.4rem', marginBottom: 10 }}>You're all set, {form.name.split(' ')[0]}!</h2>
+          <h2 style={{ fontSize: '1.4rem', marginBottom: 10 }}>Registration Successful, {form.name.split(' ')[0]}!</h2>
           <p style={{ color: 'var(--text-muted)', marginBottom: 28, lineHeight: 1.6 }}>
-            Your candidate account has been created for <strong>{form.domain}</strong>. 
-            Go to your dashboard to browse available jobs and start applying.
+            Your candidate account has been created for <strong>{form.domain}</strong>.
+            Your account is currently <strong>pending admin approval</strong>. Once approved, you will receive your login credentials via email.
           </p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             <button
               className="btn btn-primary"
               style={{ padding: '12px 0', fontSize: '0.95rem' }}
-              onClick={() => navigate('/dashboard')}
+              onClick={() => navigate('/login')}
             >
-              Go to My Dashboard →
+              Back to Login
             </button>
-            <Link to="/login" style={{ color: 'var(--text-muted)', fontSize: '0.8rem', textDecoration: 'none' }}>
-              Sign in with a different account
-            </Link>
           </div>
         </div>
       </div>
@@ -228,33 +213,7 @@ const CandidateRegister = () => {
             </select>
           </div>
 
-          {/* Password */}
-          <div>
-            <label style={labelStyle}>Password *</label>
-            <input
-              style={inputStyle}
-              type="password"
-              placeholder="Min. 6 characters"
-              value={form.password}
-              onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
-              required
-              minLength={6}
-              autoComplete="new-password"
-            />
-          </div>
-
-          {/* Confirm Password */}
-          <div>
-            <label style={labelStyle}>Confirm Password *</label>
-            <input
-              style={inputStyle}
-              type="password"
-              placeholder="Re-enter password"
-              value={form.confirmPassword}
-              onChange={e => setForm(f => ({ ...f, confirmPassword: e.target.value }))}
-              required
-            />
-          </div>
+          {/* Password fields removed as they are distributed by admin upon approval */}
 
           {/* Resume upload note */}
           <div style={{
