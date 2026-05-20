@@ -328,6 +328,8 @@ exports.overrideApplicationStatus = async (req, res) => {
         message = 'MCQ round skipped. Candidate proceeds to coding.';
       }
     } else if (action === 'skip_coding' && (app.status === 'coding_pending' || app.status === 'coding_failed')) {
+      app.scores.coding = { score: 100 };
+      app.scores.finalScore = finalScoreFromApplication(app, 100);
       app.status = 'coding_passed';
       message = 'Coding round skipped. Candidate proceeds to final selection.';
     } else if (action === 'mark_hired' && app.status === 'coding_passed') {
