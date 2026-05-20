@@ -288,7 +288,7 @@ const MCQTest = () => {
 
   if (result) {
     const passed = result.data.status !== 'mcq_failed';
-    const noCodingRound = jobSkipsCodingRound(application?.jobId?.domain);
+    const noCodingRound = jobSkipsCodingRound(application?.jobId);
     return (
       <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-primary)' }}>
         <div className="card" style={{ maxWidth: 480, textAlign: 'center', width: '100%' }}>

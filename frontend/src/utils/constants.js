@@ -29,8 +29,12 @@ export const EXPERIENCE_OPTIONS = [
 /** Domains with no coding round — keep in sync with backend `src/constants/jobDomains.js` */
 export const DOMAIN_SKIPS_CODING = 'Business Analyst';
 
-export function jobSkipsCodingRound(domain) {
-  return domain === DOMAIN_SKIPS_CODING;
+export function jobSkipsCodingRound(jobOrDomain) {
+  if (!jobOrDomain) return false;
+  if (typeof jobOrDomain === 'object') {
+    return jobOrDomain.domain === DOMAIN_SKIPS_CODING || jobOrDomain.codingWeight === 0;
+  }
+  return jobOrDomain === DOMAIN_SKIPS_CODING;
 }
 
 export const DOMAINS = [

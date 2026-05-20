@@ -28,7 +28,7 @@ const StatusBadge = ({ status }) => {
 const getStepInfo = (app) => {
   const s = app.status;
   const jobActive = app.jobId?.isActive !== false; // treat missing as active
-  const skipCoding = jobSkipsCodingRound(app.jobId?.domain);
+  const skipCoding = jobSkipsCodingRound(app.jobId);
 
   const resumeStep = {
     label: 'Resume Screening',

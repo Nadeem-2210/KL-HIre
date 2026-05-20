@@ -16,7 +16,8 @@ const JobsTab = () => {
     title: '', domain: '', description: '', skills: '',
     resumeThreshold: 60, mcqThreshold: 70, codingThreshold: 50,
     resumeWeight: 30, mcqWeight: 30, codingWeight: 40,
-    mcqCount: 20, mcqDuration: 30, codingDuration: 60
+    mcqCount: 20, mcqDuration: 30, codingDuration: 60,
+    codingDifficulty: 'mixed'
   });
   const [showInactive, setShowInactive] = useState(false);
 
@@ -47,6 +48,7 @@ const JobsTab = () => {
       mcqCount: job.mcqCount || 20,
       mcqDuration: job.mcqDuration || 30,
       codingDuration: job.codingDuration || 60,
+      codingDifficulty: job.codingDifficulty || 'mixed',
     });
     setEditingId(job._id);
     setShowForm(true);
@@ -77,7 +79,7 @@ const JobsTab = () => {
 
       setShowForm(false);
       setEditingId(null);
-      setForm({ title: '', domain: '', description: '', skills: '', resumeThreshold: 60, mcqThreshold: 70, codingThreshold: 50, resumeWeight: 30, mcqWeight: 30, codingWeight: 40, mcqCount: 20, mcqDuration: 30, codingDuration: 60 });
+      setForm({ title: '', domain: '', description: '', skills: '', resumeThreshold: 60, mcqThreshold: 70, codingThreshold: 50, resumeWeight: 30, mcqWeight: 30, codingWeight: 40, mcqCount: 20, mcqDuration: 30, codingDuration: 60, codingDifficulty: 'mixed' });
       fetchJobs();
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to save job');
@@ -109,7 +111,7 @@ const JobsTab = () => {
         <button className="btn btn-primary" onClick={() => {
           if (!showForm) {
             setEditingId(null);
-            setForm({ title: '', domain: '', description: '', skills: '', resumeThreshold: 60, mcqThreshold: 70, codingThreshold: 50, resumeWeight: 30, mcqWeight: 30, codingWeight: 40, mcqCount: 20, mcqDuration: 30, codingDuration: 60 });
+            setForm({ title: '', domain: '', description: '', skills: '', resumeThreshold: 60, mcqThreshold: 70, codingThreshold: 50, resumeWeight: 30, mcqWeight: 30, codingWeight: 40, mcqCount: 20, mcqDuration: 30, codingDuration: 60, codingDifficulty: 'mixed' });
           }
           setShowForm(v => !v);
         }}>
@@ -173,7 +175,7 @@ const JobsTab = () => {
               ))}
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginBottom: 20 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 20 }}>
               <div>
                 <label style={labelStyle}>MCQ Questions Count</label>
                 <input type="number" min="1" max="100" style={inputStyle} value={form.mcqCount} onChange={e => setForm(f => ({ ...f, mcqCount: Number(e.target.value) }))} />
@@ -186,10 +188,20 @@ const JobsTab = () => {
                 <label style={labelStyle}>Coding Duration (mins)</label>
                 <input type="number" min="1" style={inputStyle} value={form.codingDuration} onChange={e => setForm(f => ({ ...f, codingDuration: Number(e.target.value) }))} />
               </div>
+              <div>
+                <label style={labelStyle}>Coding Round Difficulty</label>
+                <select style={inputStyle} value={form.codingDifficulty} onChange={e => setForm(f => ({ ...f, codingDifficulty: e.target.value }))}>
+                  <option value="mixed">Mixed (1E, 1M, 1H)</option>
+                  <option value="easy">Easy (Only Easy)</option>
+                  <option value="medium">Medium (Only Medium)</option>
+                  <option value="easy-medium">Easy to Medium</option>
+                  <option value="hard">Hard (Only Hard)</option>
+                </select>
+              </div>
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-              <button type="button" className="btn btn-secondary" onClick={() => { setShowForm(false); setEditingId(null); setForm({ title: '', domain: '', description: '', skills: '', resumeThreshold: 60, mcqThreshold: 70, codingThreshold: 50, resumeWeight: 30, mcqWeight: 30, codingWeight: 40, mcqCount: 20, mcqDuration: 30, codingDuration: 60 }); }}>Cancel</button>
+              <button type="button" className="btn btn-secondary" onClick={() => { setShowForm(false); setEditingId(null); setForm({ title: '', domain: '', description: '', skills: '', resumeThreshold: 60, mcqThreshold: 70, codingThreshold: 50, resumeWeight: 30, mcqWeight: 30, codingWeight: 40, mcqCount: 20, mcqDuration: 30, codingDuration: 60, codingDifficulty: 'mixed' }); }}>Cancel</button>
               <button type="submit" className="btn btn-primary" disabled={submitting}>
                 {submitting ? (editingId ? 'Saving...' : 'Creating...') : (editingId ? 'Save Changes' : 'Create Job')}
               </button>
@@ -216,7 +228,16 @@ const JobsTab = () => {
                     {job.isActive && <span style={{ background: '#dcfce7', color: '#166534', padding: '2px 8px', borderRadius: 4, fontSize: '0.65rem', fontWeight: 700 }}>ACTIVE</span>}
                   </div>
                   <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{job.domain}</div>
-                  <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: 4 }}>sdlis</div>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
+                    <span style={{ fontSize: '0.72rem', fontWeight: 600, padding: '2px 6px', borderRadius: 4, background: 'var(--bg-tertiary)', border: '1px solid var(--border)', color: 'var(--text-secondary)', textTransform: 'capitalize' }}>
+                      Difficulty: {job.codingDifficulty || 'mixed'}
+                    </span>
+                    {(job.domain === 'Business Analyst' || job.codingWeight === 0) && (
+                      <span style={{ fontSize: '0.72rem', fontWeight: 700, padding: '2px 6px', borderRadius: 4, background: '#fee2e2', border: '1px solid #fca5a5', color: '#ef4444' }}>
+                        🚫 Skip Coding
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 {/* Score Stats Block */}
@@ -1162,7 +1183,7 @@ const CodingQuestionsTab = () => {
 
   // ── Form state ────────────────────────────────────────────────────────────
   const [form, setForm] = React.useState({
-    title: '', description: '', difficulty: 'medium', constraints: '',
+    title: '', domain: 'All', description: '', difficulty: 'medium', constraints: '',
     signature: '',
     mode: 'auto',          // 'auto' | 'manual'
     manualReason: '',      // reason shown when auto falls back to manual
@@ -1179,7 +1200,7 @@ const CodingQuestionsTab = () => {
   const [overrideMode,  setOverrideMode]  = React.useState(false);    // allow manual edit in auto mode
 
   const emptyForm = () => ({
-    title: '', description: '', difficulty: 'medium', constraints: '',
+    title: '', domain: 'All', description: '', difficulty: 'medium', constraints: '',
     signature: '', mode: 'auto', manualReason: '',
     starterCode: { ...BLANK_CODES }, driverCode: { ...BLANK_CODES },
     supportedLanguages: ALL_LANGUAGES.map(l => l.id),
@@ -1238,6 +1259,7 @@ const CodingQuestionsTab = () => {
         title: form.title,
         description: form.description,
         difficulty: form.difficulty,
+        domain: form.domain || 'All',
         constraints: form.constraints,
         signature: form.signature,
         mode: isEffectivelyManual ? 'manual' : 'auto',
@@ -1262,6 +1284,7 @@ const CodingQuestionsTab = () => {
   const handleEdit = (q) => {
     setForm({
       title: q.title,
+      domain: q.domain || 'All',
       description: q.description,
       difficulty: q.difficulty,
       constraints: (q.constraints || []).join('\n'),
@@ -1317,7 +1340,7 @@ const CodingQuestionsTab = () => {
             {/* ── Section 1: Basic Info ──────────────────────────────────── */}
             <div style={{ background: 'var(--bg-secondary)', borderRadius: 10, padding: 16, marginBottom: 20 }}>
               <div style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 14 }}>📋 Question Details</div>
-              <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 16, marginBottom: 16 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: 16, marginBottom: 16 }}>
                 <div>
                   <label style={labelStyle}>Question Title *</label>
                   <input style={inputStyle} placeholder="e.g. Two Sum" value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} required />
@@ -1328,6 +1351,13 @@ const CodingQuestionsTab = () => {
                     <option value="easy">Easy</option>
                     <option value="medium">Medium</option>
                     <option value="hard">Hard</option>
+                  </select>
+                </div>
+                <div>
+                  <label style={labelStyle}>Domain *</label>
+                  <select style={inputStyle} value={form.domain || 'All'} onChange={e => setForm(f => ({ ...f, domain: e.target.value }))} required>
+                    <option value="All">All Domains</option>
+                    {DOMAINS.map(d => <option key={d} value={d}>{d}</option>)}
                   </select>
                 </div>
               </div>
@@ -1554,6 +1584,7 @@ const CodingQuestionsTab = () => {
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
                     <span style={{ fontWeight: 700, fontSize: '0.95rem' }}>{q.title}</span>
                     <span style={{ fontSize: '0.7rem', fontWeight: 700, color: diffColor[q.difficulty], background: `${diffColor[q.difficulty]}20`, padding: '2px 8px', borderRadius: 20, textTransform: 'capitalize' }}>{q.difficulty}</span>
+                    <span style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--text-secondary)', background: 'var(--bg-tertiary)', border: '1px solid var(--border)', padding: '2px 8px', borderRadius: 20 }}>🌐 {q.domain || 'All'}</span>
                     {isAuto && <span style={{ fontSize: '0.65rem', fontWeight: 700, color: '#10b981', background: '#d1fae5', border: '1px solid #6ee7b7', padding: '2px 8px', borderRadius: 20 }}>🟢 Auto</span>}
                     {!isAuto && !isLegacy && <span style={{ fontSize: '0.65rem', fontWeight: 700, color: '#f59e0b', background: '#fef3c7', border: '1px solid #fbbf24', padding: '2px 8px', borderRadius: 20 }}>🔴 Manual</span>}
                     {isLegacy && <span style={{ fontSize: '0.65rem', fontWeight: 700, color: '#6b7280', background: '#f3f4f6', border: '1px solid #d1d5db', padding: '2px 8px', borderRadius: 20 }}>📂 Legacy</span>}

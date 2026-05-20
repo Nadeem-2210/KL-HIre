@@ -1,10 +1,16 @@
 const { DOMAIN_SKIPS_CODING } = require('../constants/jobDomains');
 
 /**
- * @param {string | null | undefined} domain
+ * @param {string | object | null | undefined} jobOrDomain
  * @returns {boolean}
  */
-const skipsCodingRound = (domain) => domain === DOMAIN_SKIPS_CODING;
+const skipsCodingRound = (jobOrDomain) => {
+  if (!jobOrDomain) return false;
+  if (typeof jobOrDomain === 'object') {
+    return jobOrDomain.domain === DOMAIN_SKIPS_CODING || jobOrDomain.codingWeight === 0;
+  }
+  return jobOrDomain === DOMAIN_SKIPS_CODING;
+};
 
 /**
  * Weighted final score (same formula as coding submission route).

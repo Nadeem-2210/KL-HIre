@@ -46,6 +46,11 @@ const jobSchema = new mongoose.Schema(
     mcqDuration: { type: Number, default: 30 }, // Minutes for MCQ Round
     codingCount: { type: Number, default: 3 },
     codingDuration: { type: Number, default: 60 }, // Minutes for Coding Round
+    codingDifficulty: {
+      type: String,
+      enum: ['easy', 'medium', 'easy-medium', 'hard', 'mixed'],
+      default: 'mixed',
+    },
   },
   { timestamps: true }
 );
