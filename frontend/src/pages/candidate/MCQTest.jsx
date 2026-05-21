@@ -5,6 +5,7 @@ import { jobSkipsCodingRound } from '../../utils/constants';
 import useTabProctor from '../../hooks/useTabProctor';
 import useFaceProctor from '../../hooks/useFaceProctor';
 import FaceCheckModal from '../../components/FaceCheckModal';
+import WebcamPiP from '../../components/Proctoring/WebcamPiP';
 
 // ─── Question status helpers ───────────────────────────────────────────────────
 const getQStatus = (idx, qId, answers, visited, markedForReview) => {
@@ -197,6 +198,8 @@ const MCQTest = () => {
         multiple_faces:   '👥 Multiple Faces Detected',
         face_look_away:   '👀 Looking Away',
         camera_blocked:   '📵 Camera Blocked',
+        face_mismatch:    '👤 Face Mismatch',
+        phone_detected:   '📱 Phone Detected',
       }[type] || '⚠️ Face Violation';
       const msg = isFinal
         ? `🚨 ${label}: Auto-submitting (${count}/${max} face violations)…`
@@ -323,30 +326,7 @@ const MCQTest = () => {
       {proctorMsg && <ProctoringBanner msg={proctorMsg} isFinal={proctorFinal} />}
 
       {/* ── Webcam PiP (always visible while test is active) ─────────────────── */}
-      <div style={{
-        position: 'fixed', bottom: 20, right: 20, zIndex: 9000,
-        width: 160, height: 120, borderRadius: 12, overflow: 'hidden',
-        border: `2px solid ${faceViolationCount > 0 ? '#ef4444' : '#10b981'}`,
-        boxShadow: '0 4px 24px rgba(0,0,0,0.5)',
-        background: '#000',
-      }}>
-        <video
-          ref={webcamVideoRef}
-          autoPlay muted playsInline
-          style={{ width: '100%', height: '100%', objectFit: 'cover', transform: 'scaleX(-1)' }}
-        />
-        {/* Monitoring indicator */}
-        <div style={{
-          position: 'absolute', top: 6, left: 6,
-          background: faceViolationCount > 0 ? '#ef4444' : '#10b981',
-          borderRadius: 20, padding: '2px 8px',
-          fontSize: '0.6rem', fontWeight: 700, color: '#fff',
-          display: 'flex', alignItems: 'center', gap: 4,
-        }}>
-          <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#fff', display: 'inline-block', animation: 'pulse-dot 1.5s infinite' }} />
-          LIVE
-        </div>
-      </div>
+      <WebcamPiP videoRef={webcamVideoRef} faceViolationCount={faceViolationCount} />
       <div style={{ maxWidth: 1160, width: '100%', margin: '24px auto 0', padding: '0 20px' }}>
         <div style={{
           background: 'var(--bg-card)', border: '1px solid var(--border)',

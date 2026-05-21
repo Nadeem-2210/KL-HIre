@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
+import * as faceapi from '@vladmandic/face-api';
 import api from '../services/api';
 
 /**
@@ -26,10 +27,12 @@ const useFaceProctor = ({
   // Internal mutable state
   const stateRef = useRef({ count: 0, done: false });
   const detectorRef = useRef(null);
+  const objectDetectorRef = useRef(null);
   const loopRef = useRef(null);
   const lastDetectRef = useRef(0);
   const lastViolationTimeRef = useRef(0); // For 5s cooldown
   const lookAwayStartRef = useRef(null);
+  const mismatchCountRef = useRef(0);
 
   const onViolationRef = useRef(onViolation);
   const onAutoSubmitRef = useRef(onAutoSubmit);
@@ -116,11 +119,55 @@ const useFaceProctor = ({
       }
     };
     initDetector();
+
+    // ── Init ObjectDetector for phone detection ─────────────────────────
+    const initObjectDetector = async () => {
+      try {
+        const { ObjectDetector, FilesetResolver } = await import('@mediapipe/tasks-vision');
+        const vision = await FilesetResolver.forVisionTasks(
+          'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm'
+        );
+        const objDetector = await ObjectDetector.createFromOptions(vision, {
+          baseOptions: {
+            modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/object_detector/efficientdet_lite0/float16/1/efficientdet_lite0.tflite',
+            delegate: 'GPU',
+          },
+          runningMode: 'VIDEO',
+          scoreThreshold: 0.5,
+          categoryAllowlist: ['cell phone'],
+        });
+        if (cancelled) { objDetector.close(); return; }
+        objectDetectorRef.current = objDetector;
+      } catch (err) {
+        console.warn('[useFaceProctor] ObjectDetector init failed:', err);
+      }
+    };
+    initObjectDetector();
+
+    // ── Init face-api.js models for identity verification ──────────
+    const initFaceApi = async () => {
+      try {
+        const MODEL_URL = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model/';
+        await Promise.all([
+          faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
+          faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
+          faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL),
+        ]);
+      } catch (err) {
+        console.warn('[useFaceProctor] face-api init failed:', err);
+      }
+    };
+    initFaceApi();
+
     return () => {
       cancelled = true;
       if (detectorRef.current) {
         try { detectorRef.current.close(); } catch (_) { }
         detectorRef.current = null;
+      }
+      if (objectDetectorRef.current) {
+        try { objectDetectorRef.current.close(); } catch (_) { }
+        objectDetectorRef.current = null;
       }
       setIsMonitoring(false);
     };
@@ -144,6 +191,22 @@ const useFaceProctor = ({
       if (!w || !h) {
         triggerViolation('camera_blocked', 'Camera stream appears blocked or unavailable.');
         return;
+      }
+
+      // ── Phone detection ─────────────────────────────────────────
+      if (objectDetectorRef.current) {
+        try {
+          const objResult = objectDetectorRef.current.detectForVideo(video, timestamp);
+          const hasPhone = (objResult?.detections || []).some(d =>
+            (d.categories || []).some(c =>
+              c.categoryName?.toLowerCase().includes('cell phone') ||
+              c.categoryName?.toLowerCase().includes('mobile')
+            )
+          );
+          if (hasPhone) {
+            triggerViolation('phone_detected', 'Mobile phone detected on camera. Phones are not allowed during the test.');
+          }
+        } catch (_) {}
       }
 
       let result;
@@ -181,17 +244,21 @@ const useFaceProctor = ({
       }
 
       const kp = detection.keypoints;
-      if (kp && kp.length >= 3) {
-        const rightEye = kp[0], leftEye = kp[1], noseTip = kp[2];
-        if (rightEye?.x != null && leftEye?.x != null && noseTip?.x != null) {
+      if (kp && kp.length >= 4) {
+        const rightEye = kp[0], leftEye = kp[1], noseTip = kp[2], mouthCenter = kp[3];
+        if (rightEye?.x != null && leftEye?.x != null && noseTip?.x != null && mouthCenter?.x != null) {
           const dist1 = Math.abs(noseTip.x - rightEye.x);
           const dist2 = Math.abs(noseTip.x - leftEye.x);
           const ratio = Math.max(dist1, dist2) / (Math.min(dist1, dist2) || 0.0001);
+          
           if (ratio > 2.4) {
             if (!lookAwayStartRef.current) lookAwayStartRef.current = Date.now();
             if (Date.now() - lookAwayStartRef.current > 2000) {
               triggerViolation('face_look_away', 'You appear to be looking away from the screen.');
             }
+          } else {
+            // Reset look away timer if looking straight
+            lookAwayStartRef.current = null;
           }
         }
       }
@@ -199,6 +266,51 @@ const useFaceProctor = ({
     loopRef.current = requestAnimationFrame(detect);
     return () => { if (loopRef.current) cancelAnimationFrame(loopRef.current); };
   }, [enabled, isMonitoring, triggerViolation, videoRef]);
+
+  // ── Face Recognition Background Loop (Identity Verification) ────────────────
+  useEffect(() => {
+    if (!enabled || !isMonitoring || !sessionId) return;
+    let active = true;
+
+    const checkIdentity = async () => {
+      const stored = sessionStorage.getItem(`face_descriptor_${sessionId}`);
+      if (!stored) return;
+      const refDescriptor = new Float32Array(JSON.parse(stored));
+
+      while (active) {
+        await new Promise(r => setTimeout(r, 4000)); // check every 4 seconds
+        if (!active) break;
+        
+        const video = videoRef?.current;
+        if (!video || video.readyState < 2) continue;
+
+        try {
+          const result = await faceapi
+            .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.5 }))
+            .withFaceLandmarks()
+            .withFaceDescriptor();
+
+          if (result && result.descriptor) {
+            // Euclidean distance > 0.55 generally means a completely different person
+            const distance = faceapi.euclideanDistance(result.descriptor, refDescriptor);
+            if (distance > 0.55) {
+              mismatchCountRef.current += 1;
+              if (mismatchCountRef.current >= 2) {
+                triggerViolation('face_mismatch', 'Face mismatch detected. The person taking the test does not match the reference photo.');
+                mismatchCountRef.current = 0;
+              }
+            } else {
+              mismatchCountRef.current = 0; // reset if matched
+            }
+          }
+        } catch (err) {
+          // ignore transient inference errors
+        }
+      }
+    };
+    checkIdentity();
+    return () => { active = false; };
+  }, [enabled, isMonitoring, sessionId, triggerViolation, videoRef]);
 
   useEffect(() => {
     if (!enabled) {

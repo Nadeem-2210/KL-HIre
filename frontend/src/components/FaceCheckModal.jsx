@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
+import * as faceapi from '@vladmandic/face-api';
 import api from '../services/api';
 
 const FaceCheckModal = ({ onReady, roundName = 'Test', sessionId = '' }) => {
@@ -11,6 +12,55 @@ const FaceCheckModal = ({ onReady, roundName = 'Test', sessionId = '' }) => {
   const [capturedImg, setCapturedImg] = useState(null);
   const [errorMsg, setErrorMsg]     = useState('');
   const [countdown, setCountdown]   = useState(null);
+  const [detecting, setDetecting]   = useState(false);
+  const detectorRef = useRef(null);
+
+  // ── Load face-api.js models ───────────────────────────────────────────────
+  useEffect(() => {
+    const loadFaceApiModels = async () => {
+      try {
+        const MODEL_URL = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model/';
+        await Promise.all([
+          faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
+          faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
+          faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL),
+        ]);
+        console.log('Face-api models loaded successfully');
+      } catch (err) {
+        console.warn('Face-api models failed to load:', err);
+      }
+    };
+    loadFaceApiModels();
+  }, []);
+
+  // ── Init Face Detector for reference validation ────────────────────────────
+  useEffect(() => {
+    let cancelled = false;
+    const initDetector = async () => {
+      try {
+        const { FaceDetector, FilesetResolver } = await import('@mediapipe/tasks-vision');
+        const vision = await FilesetResolver.forVisionTasks(
+          'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm'
+        );
+        const detector = await FaceDetector.createFromOptions(vision, {
+          baseOptions: {
+            modelAssetPath:
+              'https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite',
+            delegate: 'GPU',
+          },
+          runningMode: 'IMAGE',
+          minDetectionConfidence: 0.5,
+          minSuppressionThreshold: 0.3,
+        });
+        if (cancelled) { detector.close(); return; }
+        detectorRef.current = detector;
+      } catch (err) {
+        console.warn('FaceDetector init failed:', err);
+      }
+    };
+    initDetector();
+    return () => { cancelled = true; if (detectorRef.current) detectorRef.current.close(); };
+  }, []);
 
   // ── Start webcam ─────────────────────────────────────────────────────────────
   // The <video> element is always in the DOM so videoRef is available immediately.
@@ -72,16 +122,87 @@ const FaceCheckModal = ({ onReady, roundName = 'Test', sessionId = '' }) => {
   useEffect(() => {
     if (countdown === null) return;
     if (countdown === 0) {
-      const video  = videoRef.current;
-      const canvas = canvasRef.current;
-      if (video && canvas) {
-        canvas.width  = video.videoWidth  || 640;
+      const processCapture = async () => {
+        const video = videoRef.current;
+        const canvas = canvasRef.current;
+        if (!video || !canvas) { setCountdown(null); return; }
+
+        canvas.width = video.videoWidth || 640;
         canvas.height = video.videoHeight || 480;
         canvas.getContext('2d').drawImage(video, 0, 0);
+
+        const detector = detectorRef.current;
+        if (detector) {
+          setDetecting(true);
+          try {
+            const result = detector.detect(canvas);
+            const detections = result?.detections || [];
+
+            if (detections.length === 0) {
+              // Issue 11: keep camera live for seamless retake
+              setErrorMsg('No face detected. Please align your face inside the oval guide and try again.');
+              setStep('preview');
+              setDetecting(false);
+              setCountdown(null);
+              return;
+            }
+            if (detections.length > 1) {
+              // Issue 11: keep camera live for seamless retake
+              setErrorMsg('Multiple faces detected. Only one person should be visible in the frame.');
+              setStep('preview');
+              setDetecting(false);
+              setCountdown(null);
+              return;
+            }
+
+            // Issue 10: enforce face is inside oval region
+            const box = detections[0].boundingBox;
+            if (box) {
+              const cx = (box.originX + box.width  / 2) / (canvas.width  || 640);
+              const cy = (box.originY + box.height / 2) / (canvas.height || 480);
+              // Oval guide: center 45% x 65% of frame — ellipse equation
+              const inOval = ((cx - 0.5) / 0.225) ** 2 + ((cy - 0.5) / 0.325) ** 2 <= 1;
+              if (!inOval) {
+                setErrorMsg('Your face is outside the oval guide. Please centre your face inside the oval and try again.');
+                setStep('preview');
+                setDetecting(false);
+                setCountdown(null);
+                return;
+              }
+            }
+
+            // ── Extract 128D Face Descriptor using face-api.js ─────────────
+            try {
+              const faceApiResult = await faceapi
+                .detectSingleFace(canvas, new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.5 }))
+                .withFaceLandmarks()
+                .withFaceDescriptor();
+
+              if (!faceApiResult) {
+                setErrorMsg('Facial features could not be clearly extracted. Ensure good lighting and look straight ahead.');
+                setStep('preview');
+                setDetecting(false);
+                setCountdown(null);
+                return;
+              }
+
+              // Store the 128D Float32Array descriptor as a standard array in sessionStorage
+              const descriptorArray = Array.from(faceApiResult.descriptor);
+              sessionStorage.setItem(`face_descriptor_${sessionId}`, JSON.stringify(descriptorArray));
+            } catch (err) {
+              console.warn('Face-api descriptor error:', err);
+            }
+          } catch (e) {
+            console.warn('Detection error', e);
+          }
+          setDetecting(false);
+        }
+
         setCapturedImg(canvas.toDataURL('image/jpeg', 0.85));
         setStep('captured');
-      }
-      setCountdown(null);
+        setCountdown(null);
+      };
+      processCapture();
       return;
     }
     const t = setTimeout(() => setCountdown(c => c - 1), 1000);
@@ -157,7 +278,14 @@ const FaceCheckModal = ({ onReady, roundName = 'Test', sessionId = '' }) => {
           </p>
         </div>
 
-        {/* Error state */}
+        {/* Error / validation banner — shown during preview when a retake is needed */}
+        {step === 'preview' && errorMsg && (
+          <div style={{ background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.5)', borderRadius: 10, padding: '10px 14px', marginBottom: 12 }}>
+            <div style={{ color: '#f87171', fontWeight: 600, fontSize: '0.82rem' }}>⚠️ {errorMsg}</div>
+          </div>
+        )}
+
+        {/* Error state — only for camera-level errors (permission denied etc.) */}
         {step === 'error' && (
           <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.4)', borderRadius: 12, padding: '16px 20px', marginBottom: 20 }}>
             <div style={{ color: '#f87171', fontWeight: 600, marginBottom: 6 }}>⚠️ Camera Unavailable</div>
@@ -208,7 +336,7 @@ const FaceCheckModal = ({ onReady, roundName = 'Test', sessionId = '' }) => {
           )}
 
           {/* Countdown overlay */}
-          {countdown !== null && (
+          {countdown !== null && !detecting && (
             <div style={{
               position: 'absolute', inset: 0,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -217,6 +345,22 @@ const FaceCheckModal = ({ onReady, roundName = 'Test', sessionId = '' }) => {
               <div style={{ fontSize: 96, fontWeight: 900, color: '#fff', textShadow: '0 0 40px rgba(99,102,241,0.8)' }}>
                 {countdown}
               </div>
+            </div>
+          )}
+
+          {/* Detecting overlay */}
+          {detecting && (
+            <div style={{
+              position: 'absolute', inset: 0,
+              display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+              background: 'rgba(0,0,0,0.7)',
+            }}>
+              <div style={{
+                width: 48, height: 48, border: '3px solid rgba(99,102,241,0.3)',
+                borderTopColor: '#10b981', borderRadius: '50%',
+                animation: 'spin 1s linear infinite', marginBottom: 12,
+              }} />
+              <div style={{ color: '#fff', fontWeight: 600, fontSize: '0.9rem' }}>Analyzing Face...</div>
             </div>
           )}
 

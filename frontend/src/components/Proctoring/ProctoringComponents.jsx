@@ -11,6 +11,8 @@ const VIOLATION_LABELS = {
   fullscreen_exit: '⛶ Fullscreen Exited',
   devtools_open: '🔧 DevTools Detected',
   multiple_screens: '🖥 Multiple Screens Detected',
+  face_mismatch: '👤 Face Mismatch',
+  phone_detected: '📱 Phone Detected',
 };
 
 const ViolationOverlay = ({ violation, onDismiss, count }) => {
