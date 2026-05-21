@@ -12,6 +12,7 @@ const JobsTab = () => {
   const [editing, setEditing] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState({
     title: '', domain: '', description: '', skills: '',
     resumeThreshold: 60, mcqThreshold: 70, codingThreshold: 50,
@@ -48,14 +49,14 @@ const JobsTab = () => {
       mcqDuration: job.mcqDuration ?? 30,
       codingDuration: job.codingDuration ?? 60,
     });
-    setEditing(job._id);
+    setEditingId(job._id);
     setShowForm(true);
   };
 
   const handleToggleForm = () => {
     if (showForm) {
       setShowForm(false);
-      setEditing(null);
+      setEditingId(null);
       setError('');
     } else {
       setForm({
@@ -64,19 +65,18 @@ const JobsTab = () => {
         resumeWeight: 30, mcqWeight: 30, codingWeight: 40,
         mcqCount: 20, mcqDuration: 30, codingDuration: 60
       });
-      setEditing(null);
+      setEditingId(null);
       setError('');
       setShowForm(true);
     }
   };
-
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSubmitting(true); setError('');
 
     const totalWeight = Number(form.resumeWeight) + Number(form.mcqWeight) + Number(form.codingWeight);
     if (totalWeight !== 100) {
-      setError(`Weights must sum up to 100. Current sum: ${totalWeight}`);
+      setError(`Weights must sum up to 100. (Current sum: ${totalWeight}%)`);
       setSubmitting(false);
       return;
     }
@@ -87,14 +87,14 @@ const JobsTab = () => {
         requiredSkills: form.skills.split(',').map(s => s.trim()).filter(Boolean),
       };
 
-      if (editing) {
-        await api.put(`/jobs/${editing}`, payload);
+      if (editingId) {
+        await api.put(`/jobs/${editingId}`, payload);
       } else {
         await api.post('/jobs', payload);
       }
 
       setShowForm(false);
-      setEditing(null);
+      setEditingId(null);
       setForm({ title: '', domain: '', description: '', skills: '', resumeThreshold: 60, mcqThreshold: 70, codingThreshold: 50, resumeWeight: 30, mcqWeight: 30, codingWeight: 40, mcqCount: 20, mcqDuration: 30, codingDuration: 60 });
       fetchJobs();
     } catch (err) {
@@ -131,7 +131,7 @@ const JobsTab = () => {
 
       {showForm && (
         <div className="card" style={{ marginBottom: 24 }}>
-          <h3 style={{ marginBottom: 20, fontSize: '1rem' }}>{editing ? 'Edit Job Posting' : 'New Job Posting'}</h3>
+          <h3 style={{ marginBottom: 20, fontSize: '1rem' }}>{editingId ? 'Edit Job Posting' : 'New Job Posting'}</h3>
           {error && <div className="alert alert-danger" style={{ marginBottom: 16 }}>{error}</div>}
           <form onSubmit={handleSubmit}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
@@ -201,9 +201,9 @@ const JobsTab = () => {
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-              <button type="button" className="btn btn-secondary" onClick={() => { setShowForm(false); setEditing(null); setError(''); }}>Cancel</button>
+              <button type="button" className="btn btn-secondary" onClick={() => { setShowForm(false); setEditingId(null); setError(''); }}>Cancel</button>
               <button type="submit" className="btn btn-primary" disabled={submitting}>
-                {submitting ? 'Saving...' : editing ? 'Update Job' : 'Create Job'}
+                {submitting ? 'Saving...' : editingId ? 'Update Job' : 'Create Job'}
               </button>
             </div>
           </form>
@@ -1599,6 +1599,397 @@ const CodingQuestionsTab = () => {
   );
 };
 
+// ─── Tab: Trainee Management ──────────────────────────────────────────────────
+const TraineesTab = () => {
+  const [trainees, setTrainees] = React.useState([]);
+  const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState('');
+  const [search, setSearch] = React.useState('');
+  const [statusFilter, setStatusFilter] = React.useState('all');
+  const [domainFilter, setDomainFilter] = React.useState('all');
+  
+  // Toast and credentials sending state
+  const [toast, setToast] = React.useState('');
+  const [sendingCredsId, setSendingCredsId] = React.useState(null);
+  
+  // Modal state
+  const [editingTrainee, setEditingTrainee] = React.useState(null);
+  const [modalForm, setModalForm] = React.useState({
+    email: '',
+    password: '',
+    isActive: true,
+    status: 'pending'
+  });
+  const [modalError, setModalError] = React.useState('');
+  const [modalSuccess, setModalSuccess] = React.useState('');
+  const [saving, setSaving] = React.useState(false);
+
+  const fetchTrainees = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const { data } = await api.get('/auth/trainees');
+      setTrainees(data.data);
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to fetch trainees');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  React.useEffect(() => {
+    fetchTrainees();
+  }, []);
+
+  const handleUpdateStatus = async (id, newStatus) => {
+    try {
+      await api.put(`/auth/trainees/${id}/status`, { status: newStatus });
+      fetchTrainees();
+    } catch (err) {
+      alert(err.response?.data?.message || 'Failed to update trainee status');
+    }
+  };
+
+  const handleApproveAndSendCredentials = async (trainee) => {
+    setSendingCredsId(trainee._id);
+    try {
+      const { data } = await api.post(`/auth/trainees/${trainee._id}/approve-credentials`);
+      setToast(data.message || `Credentials successfully sent to ${trainee.email}!`);
+      fetchTrainees();
+      setTimeout(() => {
+        setToast('');
+      }, 7000);
+    } catch (err) {
+      alert(err.response?.data?.message || 'Failed to approve and send credentials.');
+    } finally {
+      setSendingCredsId(null);
+    }
+  };
+
+  const handleOpenEditModal = (trainee) => {
+    setEditingTrainee(trainee);
+    setModalForm({
+      email: trainee.email,
+      password: '',
+      isActive: trainee.isActive !== false,
+      status: trainee.status || 'pending'
+    });
+    setModalError('');
+    setModalSuccess('');
+  };
+
+  const handleSaveCredentials = async (e) => {
+    e.preventDefault();
+    setSaving(true);
+    setModalError('');
+    setModalSuccess('');
+    try {
+      const payload = {
+        email: modalForm.email,
+        isActive: modalForm.isActive,
+        status: modalForm.status
+      };
+      if (modalForm.password) {
+        payload.password = modalForm.password;
+      }
+      await api.put(`/auth/trainees/${editingTrainee._id}/credentials`, payload);
+      setModalSuccess('Trainee updated successfully!');
+      fetchTrainees();
+      setTimeout(() => {
+        setEditingTrainee(null);
+      }, 1000);
+    } catch (err) {
+      setModalError(err.response?.data?.message || 'Failed to update trainee credentials');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDeleteTrainee = async (id, name) => {
+    if (!window.confirm(`Are you sure you want to permanently delete trainee "${name}"? This will also delete all their job applications and scores. This action cannot be undone.`)) {
+      return;
+    }
+    
+    try {
+      await api.delete(`/auth/trainees/${id}`);
+      setToast(`Trainee "${name}" has been deleted.`);
+      fetchTrainees();
+      setTimeout(() => setToast(''), 5000);
+    } catch (err) {
+      alert(err.response?.data?.message || 'Failed to delete trainee');
+    }
+  };
+
+  const filtered = trainees.filter(t => {
+    const matchesSearch = t.name.toLowerCase().includes(search.toLowerCase()) || 
+                          t.email.toLowerCase().includes(search.toLowerCase());
+    const matchesStatus = statusFilter === 'all' || t.status === statusFilter;
+    const matchesDomain = domainFilter === 'all' || t.domain === domainFilter;
+    return matchesSearch && matchesStatus && matchesDomain;
+  });
+
+  const statusBadge = (status) => {
+    switch (status) {
+      case 'approved':
+        return <span className="badge badge-success">Approved</span>;
+      case 'rejected':
+        return <span className="badge badge-danger">Rejected</span>;
+      default:
+        return <span className="badge badge-warning">Pending</span>;
+    }
+  };
+
+  const activeBadge = (isActive) => {
+    return isActive !== false 
+      ? <span style={{ background: '#d1fae5', color: '#065f46', fontSize: '0.7rem', padding: '2px 8px', borderRadius: 4, fontWeight: 600 }}>Active</span>
+      : <span style={{ background: '#fee2e2', color: '#991b1b', fontSize: '0.7rem', padding: '2px 8px', borderRadius: 4, fontWeight: 600 }}>Deactivated</span>;
+  };
+
+  const labelStyle = { fontWeight: 600, fontSize: '0.8rem', display: 'block', marginBottom: 4, color: 'var(--text-secondary)' };
+  const inputStyle = { width: '100%', padding: '8px 12px', borderRadius: 7, border: '1px solid var(--border)', background: 'var(--bg-secondary)', color: 'var(--text-primary)', fontSize: '0.875rem', boxSizing: 'border-box' };
+
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+        <div>
+          <h2 style={{ margin: 0, fontSize: '1.2rem' }}>Trainee Management</h2>
+          <p style={{ margin: '4px 0 0', color: 'var(--text-muted)', fontSize: '0.82rem' }}>
+            Approve, reject, or manage trainee (candidate) accounts and credentials
+          </p>
+        </div>
+      </div>
+
+      {error && <div className="alert alert-danger" style={{ marginBottom: 16 }}>{error}</div>}
+
+      {/* Filters */}
+      <div className="card" style={{ padding: 16, marginBottom: 20, display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+        <div style={{ flex: 1, minWidth: 200 }}>
+          <input
+            style={inputStyle}
+            type="text"
+            placeholder="Search by name or email..."
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+          />
+        </div>
+        <div style={{ width: 180 }}>
+          <select style={inputStyle} value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
+            <option value="all">All Statuses</option>
+            <option value="pending">Pending Approval</option>
+            <option value="approved">Approved</option>
+            <option value="rejected">Rejected</option>
+          </select>
+        </div>
+        <div style={{ width: 180 }}>
+          <select style={inputStyle} value={domainFilter} onChange={e => setDomainFilter(e.target.value)}>
+            <option value="all">All Domains</option>
+            {DOMAINS.map(d => <option key={d} value={d}>{d}</option>)}
+          </select>
+        </div>
+        <button className="btn btn-secondary btn-sm" onClick={() => { setSearch(''); setStatusFilter('all'); setDomainFilter('all'); }}>
+          Reset
+        </button>
+      </div>
+
+      {/* Table */}
+      {loading ? (
+        <div style={{ textAlign: 'center', padding: 40 }}><div className="spinner" /></div>
+      ) : filtered.length === 0 ? (
+        <div className="card" style={{ textAlign: 'center', padding: 48, color: 'var(--text-muted)' }}>
+          <div style={{ fontSize: 40, marginBottom: 12 }}>👥</div>
+          <p>No trainees found matching the filters.</p>
+        </div>
+      ) : (
+        <div className="card" style={{ padding: 0, overflowX: 'auto', border: '1px solid var(--border)' }}>
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Email</th>
+                <th>Domain</th>
+                <th>Experience</th>
+                <th>Status</th>
+                <th>Access</th>
+                <th>Registered At</th>
+                <th style={{ textAlign: 'right' }}>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map(t => (
+                <tr key={t._id}>
+                  <td style={{ fontWeight: 600 }}>{t.name}</td>
+                  <td>{t.email}</td>
+                  <td>{t.domain || '—'}</td>
+                  <td>{t.experience ? `${t.experience} yr(s)` : '—'}</td>
+                  <td>{statusBadge(t.status)}</td>
+                  <td>{activeBadge(t.isActive)}</td>
+                  <td>{t.createdAt ? new Date(t.createdAt).toLocaleDateString() : '—'}</td>
+                  <td>
+                    <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', alignItems: 'center' }}>
+                      {t.status !== 'approved' ? (
+                        <button
+                          className="btn btn-success btn-sm"
+                          style={{ padding: '4px 10px', background: '#10b981', borderColor: '#10b981', color: '#ffffff' }}
+                          onClick={() => handleApproveAndSendCredentials(t)}
+                          disabled={sendingCredsId === t._id}
+                        >
+                          {sendingCredsId === t._id ? 'Sending...' : 'Approve & Send Credentials'}
+                        </button>
+                      ) : (
+                        <button
+                          className="btn btn-secondary btn-sm"
+                          style={{ padding: '4px 10px' }}
+                          onClick={() => handleApproveAndSendCredentials(t)}
+                          disabled={sendingCredsId === t._id}
+                        >
+                          {sendingCredsId === t._id ? 'Sending...' : 'Resend Credentials'}
+                        </button>
+                      )}
+                      {t.status !== 'rejected' && (
+                        <button
+                          className="btn btn-danger btn-sm"
+                          style={{ padding: '4px 10px' }}
+                          onClick={() => handleUpdateStatus(t._id, 'rejected')}
+                          disabled={sendingCredsId === t._id}
+                        >
+                          Reject
+                        </button>
+                      )}
+                      <button
+                        className="btn btn-secondary btn-sm"
+                        style={{ padding: '4px 10px' }}
+                        onClick={() => handleOpenEditModal(t)}
+                        disabled={sendingCredsId === t._id}
+                      >
+                        ⚙ Edit
+                      </button>
+                      <button
+                        className="btn btn-danger btn-sm"
+                        style={{ padding: '4px 10px', background: '#ef4444', borderColor: '#ef4444' }}
+                        onClick={() => handleDeleteTrainee(t._id, t.name)}
+                        disabled={sendingCredsId === t._id}
+                        title="Delete Trainee"
+                      >
+                        🗑 Delete
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Floating success toast */}
+      {toast && (
+        <div style={{
+          position: 'fixed',
+          bottom: 24,
+          right: 24,
+          background: toast.includes('failed') ? '#f97316' : '#10b981',
+          color: '#ffffff',
+          padding: '16px 24px',
+          borderRadius: 12,
+          boxShadow: '0 10px 25px rgba(0,0,0,0.2)',
+          zIndex: 1000,
+          fontWeight: 600,
+          display: 'flex',
+          alignItems: 'flex-start',
+          gap: 12,
+          maxWidth: '450px',
+          lineHeight: '1.4',
+          animation: 'slideIn 0.3s ease'
+        }}>
+          <span style={{ fontSize: '1.3rem', marginTop: -2 }}>{toast.includes('failed') ? '⚠️' : '✓'}</span>
+          <div style={{ flex: 1, fontSize: '0.9rem' }}>{toast}</div>
+          <button 
+            onClick={() => setToast('')} 
+            style={{ background: 'none', border: 'none', color: '#ffffff', cursor: 'pointer', fontSize: '1rem', padding: '0 4px', opacity: 0.8 }}
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
+      {/* Edit Credentials Modal */}
+      {editingTrainee && (
+        <div className="modal-backdrop" onClick={() => setEditingTrainee(null)}>
+          <div className="modal" style={{ maxWidth: 440 }} onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+              <h3 style={{ margin: 0, fontSize: '1.1rem' }}>Edit Trainee: {editingTrainee.name}</h3>
+              <button className="btn btn-ghost btn-sm" onClick={() => setEditingTrainee(null)}>✕</button>
+            </div>
+
+            {modalError && <div className="alert alert-danger" style={{ marginBottom: 16 }}>{modalError}</div>}
+            {modalSuccess && <div className="alert alert-success" style={{ marginBottom: 16 }}>{modalSuccess}</div>}
+
+            <form onSubmit={handleSaveCredentials} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div>
+                <label style={labelStyle}>Email Address</label>
+                <input
+                  style={inputStyle}
+                  type="email"
+                  value={modalForm.email}
+                  onChange={e => setModalForm(f => ({ ...f, email: e.target.value }))}
+                  required
+                />
+              </div>
+
+              <div>
+                <label style={labelStyle}>Password (leave blank to keep current)</label>
+                <input
+                  style={inputStyle}
+                  type="password"
+                  placeholder="New password (min 6 characters)"
+                  value={modalForm.password}
+                  onChange={e => setModalForm(f => ({ ...f, password: e.target.value }))}
+                  minLength={6}
+                />
+              </div>
+
+              <div>
+                <label style={labelStyle}>Approval Status</label>
+                <select
+                  style={inputStyle}
+                  value={modalForm.status}
+                  onChange={e => setModalForm(f => ({ ...f, status: e.target.value }))}
+                >
+                  <option value="pending">Pending</option>
+                  <option value="approved">Approved</option>
+                  <option value="rejected">Rejected</option>
+                </select>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
+                <input
+                  type="checkbox"
+                  id="isActive"
+                  checked={modalForm.isActive}
+                  onChange={e => setModalForm(f => ({ ...f, isActive: e.target.checked }))}
+                  style={{ width: 18, height: 18, cursor: 'pointer' }}
+                />
+                <label htmlFor="isActive" style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)', cursor: 'pointer' }}>
+                  Activate Account Access
+                </label>
+              </div>
+
+              <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 10 }}>
+                <button type="button" className="btn btn-secondary" onClick={() => setEditingTrainee(null)}>
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-primary" disabled={saving}>
+                  {saving ? 'Saving...' : 'Save Changes'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 // ─── Admin Dashboard Shell ─────────────────────────────────────────────────────
 const AdminDashboard = () => {
   const navigate = useNavigate();
@@ -1609,6 +2000,7 @@ const AdminDashboard = () => {
     if (path.includes('mcq')) return 'mcq';
     if (path.includes('candidates')) return 'candidates';
     if (path.includes('coding')) return 'coding';
+    if (path.includes('trainees')) return 'trainees';
     return 'jobs';
   };
 
@@ -1628,6 +2020,7 @@ const AdminDashboard = () => {
     { id: 'mcq', label: '📝 MCQ' },
     { id: 'coding', label: '💻 Coding Questions' },
     { id: 'candidates', label: '👥 Candidates' },
+    { id: 'trainees', label: '👥 Trainees' },
   ];
 
   const handleSelectCandidate = (appId) => {
@@ -1690,6 +2083,7 @@ const AdminDashboard = () => {
         {tab === 'mcq' && <MCQTab />}
         {tab === 'coding' && <CodingQuestionsTab />}
         {tab === 'candidates' && <CandidatesTab onSelectCandidate={handleSelectCandidate} />}
+        {tab === 'trainees' && <TraineesTab />}
         {tab === 'detail' && selectedAppId && (
           <CandidateDetail appId={selectedAppId} onBack={handleBack} />
         )}

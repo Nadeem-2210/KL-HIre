@@ -27,11 +27,30 @@ const connectDB = async () => {
       // Fall through to in-memory
     }
 
-    console.log('⚡ Local MongoDB not found — starting in-memory MongoDB...');
-    mongod = await MongoMemoryServer.create();
-    uri = mongod.getUri();
-    console.log(`✅ In-memory MongoDB started at: ${uri}`);
-    console.log('⚠️  Note: Data will be lost when server restarts. Use MongoDB Atlas for persistence.');
+    console.log('⚡ Local MongoDB not found — starting persistent local MongoDB server...');
+    const fs = require('fs');
+    const path = require('path');
+    const dbPath = path.resolve(process.cwd(), 'data/db');
+    if (!fs.existsSync(dbPath)) {
+      fs.mkdirSync(dbPath, { recursive: true });
+    }
+
+    try {
+      mongod = await MongoMemoryServer.create({
+        instance: {
+          dbPath: dbPath,
+          storageEngine: 'wiredTiger'
+        }
+      });
+      uri = mongod.getUri();
+      console.log(`✅ Persistent local MongoDB started at: ${uri}`);
+      console.log(`📂 Data directory: ${dbPath}`);
+    } catch (err) {
+      console.warn('⚠️ Failed to initialize persistent storage, falling back to ephemeral memory:', err.message);
+      mongod = await MongoMemoryServer.create();
+      uri = mongod.getUri();
+      console.log(`✅ Ephemeral In-memory MongoDB started at: ${uri}`);
+    }
   }
 
   try {

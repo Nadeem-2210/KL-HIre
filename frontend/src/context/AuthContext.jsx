@@ -57,14 +57,7 @@ export const AuthProvider = ({ children }) => {
 
   const register = useCallback(async (name, email, password, role, adminKey) => {
     const { data } = await api.post('/auth/register', { name, email, password, role, adminKey });
-    const userRole = data.user.role === 'admin' ? 'admin' : 'candidate';
-    localStorage.setItem(`token_${userRole}`, data.token);
-    localStorage.setItem(`user_${userRole}`, JSON.stringify(data.user));
-    
-    if (getRolePrefix() === userRole) {
-      setUser(data.user);
-    }
-    return data.user;
+    return data;
   }, []);
 
   const logout = useCallback(() => {
@@ -76,7 +69,7 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout, isAuthenticated: !!user }}>
+    <AuthContext.Provider value={{ user, setUser, loading, login, register, logout, isAuthenticated: !!user }}>
       {children}
     </AuthContext.Provider>
   );
