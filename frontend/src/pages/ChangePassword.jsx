@@ -14,6 +14,9 @@ const ChangePassword = () => {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showCurrentPw, setShowCurrentPw] = useState(false);
+  const [showNewPw, setShowNewPw] = useState(false);
+  const [showConfirmPw, setShowConfirmPw] = useState(false);
 
   const labelStyle = {
     fontWeight: 600, fontSize: '0.8rem', display: 'block',
@@ -94,38 +97,80 @@ const ChangePassword = () => {
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           <div>
             <label style={labelStyle}>Temporary Password *</label>
-            <input
-              style={inputStyle}
-              type="password"
-              placeholder="Enter your temporary password"
-              value={form.currentPassword}
-              onChange={e => setForm(f => ({ ...f, currentPassword: e.target.value }))}
-              required
-            />
+            <div style={{ position: 'relative' }}>
+              <input
+                style={{ ...inputStyle, paddingRight: 40 }}
+                type={showCurrentPw ? 'text' : 'password'}
+                placeholder="Enter your temporary password"
+                value={form.currentPassword}
+                onChange={e => setForm(f => ({ ...f, currentPassword: e.target.value }))}
+                required
+              />
+              <button
+                type="button"
+                onClick={() => setShowCurrentPw(p => !p)}
+                style={{
+                  position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)',
+                  background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer',
+                  fontSize: '1rem', display: 'flex', alignItems: 'center', padding: 0, zIndex: 2
+                }}
+                title={showCurrentPw ? "Hide password" : "Show password"}
+              >
+                {showCurrentPw ? '👁️' : '🙈'}
+              </button>
+            </div>
           </div>
 
           <div>
             <label style={labelStyle}>New Password *</label>
-            <input
-              style={inputStyle}
-              type="password"
-              placeholder="Min. 6 characters"
-              value={form.newPassword}
-              onChange={e => setForm(f => ({ ...f, newPassword: e.target.value }))}
-              required
-            />
+            <div style={{ position: 'relative' }}>
+              <input
+                style={{ ...inputStyle, paddingRight: 40 }}
+                type={showNewPw ? 'text' : 'password'}
+                placeholder="Min. 6 characters"
+                value={form.newPassword}
+                onChange={e => setForm(f => ({ ...f, newPassword: e.target.value }))}
+                required
+              />
+              <button
+                type="button"
+                onClick={() => setShowNewPw(p => !p)}
+                style={{
+                  position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)',
+                  background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer',
+                  fontSize: '1rem', display: 'flex', alignItems: 'center', padding: 0, zIndex: 2
+                }}
+                title={showNewPw ? "Hide password" : "Show password"}
+              >
+                {showNewPw ? '👁️' : '🙈'}
+              </button>
+            </div>
           </div>
 
           <div>
             <label style={labelStyle}>Confirm New Password *</label>
-            <input
-              style={inputStyle}
-              type="password"
-              placeholder="Re-enter new password"
-              value={form.confirmPassword}
-              onChange={e => setForm(f => ({ ...f, confirmPassword: e.target.value }))}
-              required
-            />
+            <div style={{ position: 'relative' }}>
+              <input
+                style={{ ...inputStyle, paddingRight: 40 }}
+                type={showConfirmPw ? 'text' : 'password'}
+                placeholder="Re-enter new password"
+                value={form.confirmPassword}
+                onChange={e => setForm(f => ({ ...f, confirmPassword: e.target.value }))}
+                required
+              />
+              <button
+                type="button"
+                onClick={() => setShowConfirmPw(p => !p)}
+                style={{
+                  position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)',
+                  background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer',
+                  fontSize: '1rem', display: 'flex', alignItems: 'center', padding: 0, zIndex: 2
+                }}
+                title={showConfirmPw ? "Hide password" : "Show password"}
+              >
+                {showConfirmPw ? '👁️' : '🙈'}
+              </button>
+            </div>
           </div>
 
           <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>

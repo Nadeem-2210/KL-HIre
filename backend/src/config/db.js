@@ -1,9 +1,16 @@
 const mongoose = require('mongoose');
 const { MongoMemoryServer } = require('mongodb-memory-server');
+const dns = require('dns');
 
 let mongod = null;
 
 const connectDB = async () => {
+  try {
+    dns.setServers(['8.8.8.8', '1.1.1.1']);
+  } catch (dnsErr) {
+    console.warn('Unable to set DNS servers:', dnsErr.message);
+  }
+
   let uri = process.env.MONGO_URI;
 
   // If using default localhost URI, try real MongoDB first, fall back to in-memory
