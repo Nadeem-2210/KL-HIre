@@ -29,6 +29,74 @@ const CodeEvalRound = () => {
   const webcamVideoRef = useRef(null);
   const camStreamRef   = useRef(null);
 
+  const [pipPos, setPipPos] = useState({ x: window.innerWidth - 180, y: window.innerHeight - 140 });
+  const [isDragging, setIsDragging] = useState(false);
+  const dragStartOffset = useRef({ x: 0, y: 0 });
+
+  // Update initial position on mount or resize
+  useEffect(() => {
+    const handleResize = () => {
+      setPipPos(prev => {
+        const pipWidth = 160;
+        const pipHeight = 120;
+        const newX = Math.max(10, Math.min(window.innerWidth - pipWidth - 10, prev.x));
+        const newY = Math.max(10, Math.min(window.innerHeight - pipHeight - 10, prev.y));
+        return { x: newX, y: newY };
+      });
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  const handleDragStart = (e) => {
+    e.preventDefault();
+    setIsDragging(true);
+    const clientX = e.clientX || (e.touches && e.touches[0].clientX);
+    const clientY = e.clientY || (e.touches && e.touches[0].clientY);
+    dragStartOffset.current = {
+      x: clientX - pipPos.x,
+      y: clientY - pipPos.y,
+    };
+  };
+
+  const handleDragMove = (e) => {
+    if (!isDragging) return;
+    const clientX = e.clientX || (e.touches && e.touches[0].clientX);
+    const clientY = e.clientY || (e.touches && e.touches[0].clientY);
+    if (clientX === undefined || clientY === undefined) return;
+    
+    const pipWidth = 160;
+    const pipHeight = 120;
+    const newX = Math.max(10, Math.min(window.innerWidth - pipWidth - 10, clientX - dragStartOffset.current.x));
+    const newY = Math.max(10, Math.min(window.innerHeight - pipHeight - 10, clientY - dragStartOffset.current.y));
+    
+    setPipPos({ x: newX, y: newY });
+  };
+
+  const handleDragEnd = () => {
+    setIsDragging(false);
+  };
+
+  useEffect(() => {
+    if (isDragging) {
+      window.addEventListener('mousemove', handleDragMove);
+      window.addEventListener('mouseup', handleDragEnd);
+      window.addEventListener('touchmove', handleDragMove, { passive: false });
+      window.addEventListener('touchend', handleDragEnd);
+    } else {
+      window.removeEventListener('mousemove', handleDragMove);
+      window.removeEventListener('mouseup', handleDragEnd);
+      window.removeEventListener('touchmove', handleDragMove);
+      window.removeEventListener('touchend', handleDragEnd);
+    }
+    return () => {
+      window.removeEventListener('mousemove', handleDragMove);
+      window.removeEventListener('mouseup', handleDragEnd);
+      window.removeEventListener('touchmove', handleDragMove);
+      window.removeEventListener('touchend', handleDragEnd);
+    };
+  }, [isDragging]);
+
   useEffect(() => {
     if (faceReady && webcamVideoRef.current && camStreamRef.current) {
       webcamVideoRef.current.srcObject = camStreamRef.current;
@@ -77,7 +145,7 @@ const CodeEvalRound = () => {
         const { data: appData } = await api.get('/applications/my');
         const app = (appData.data || []).find(a => a._id === appId);
         if (!app) { setError('Application not found.'); setLoading(false); return; }
-        if (jobSkipsCodingRound(app.jobId?.domain)) {
+        if (jobSkipsCodingRound(app.jobId)) {
           setError('This role does not include a coding round. Return to your dashboard.');
           setLoading(false);
           return;
@@ -455,17 +523,31 @@ const CodeEvalRound = () => {
       )}
 
       {/* ── Webcam PiP ────────────────────────────────────────────────── */}
-      <div style={{
-        position: 'fixed', bottom: 20, right: 20, zIndex: 9000,
-        width: 160, height: 120, borderRadius: 12, overflow: 'hidden',
-        border: `2px solid ${faceViolationCount > 0 ? '#ef4444' : '#10b981'}`,
-        boxShadow: '0 4px 24px rgba(0,0,0,0.5)',
-        background: '#000',
-      }}>
+      <div 
+        onMouseDown={handleDragStart}
+        onTouchStart={handleDragStart}
+        style={{
+          position: 'fixed', 
+          left: pipPos.x, 
+          top: pipPos.y, 
+          zIndex: 9000,
+          width: 160, 
+          height: 120, 
+          borderRadius: 12, 
+          overflow: 'hidden',
+          border: `2px solid ${faceViolationCount > 0 ? '#ef4444' : '#10b981'}`,
+          boxShadow: '0 4px 24px rgba(0,0,0,0.5)',
+          background: '#000',
+          cursor: isDragging ? 'grabbing' : 'grab',
+          userSelect: 'none',
+          touchAction: 'none'
+        }}
+      >
         <video
           ref={webcamVideoRef}
           autoPlay muted playsInline
-          style={{ width: '100%', height: '100%', objectFit: 'cover', transform: 'scaleX(-1)' }}
+          disablePictureInPicture={true}
+          style={{ width: '100%', height: '100%', objectFit: 'cover', transform: 'scaleX(-1)', pointerEvents: 'none' }}
         />
         <div style={{
           position: 'absolute', top: 6, left: 6,
@@ -473,6 +555,8 @@ const CodeEvalRound = () => {
           borderRadius: 20, padding: '2px 8px',
           fontSize: '0.6rem', fontWeight: 700, color: '#fff',
           display: 'flex', alignItems: 'center', gap: 4,
+          pointerEvents: 'none',
+          userSelect: 'none'
         }}>
           <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#fff', display: 'inline-block' }} />
           LIVE

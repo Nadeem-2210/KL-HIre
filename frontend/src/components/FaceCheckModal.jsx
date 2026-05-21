@@ -11,6 +11,43 @@ const FaceCheckModal = ({ onReady, roundName = 'Test', sessionId = '' }) => {
   const [capturedImg, setCapturedImg] = useState(null);
   const [errorMsg, setErrorMsg]     = useState('');
   const [countdown, setCountdown]   = useState(null);
+  const [detector, setDetector]     = useState(null);
+  const [isAiLoading, setIsAiLoading] = useState(true);
+
+  // Initialize MediaPipe FaceDetector on mount
+  useEffect(() => {
+    let active = true;
+    const initDetector = async () => {
+      try {
+        const { FaceDetector, FilesetResolver } = await import('@mediapipe/tasks-vision');
+        const vision = await FilesetResolver.forVisionTasks(
+          'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm'
+        );
+        const det = await FaceDetector.createFromOptions(vision, {
+          baseOptions: {
+            modelAssetPath:
+              'https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite',
+            delegate: 'GPU',
+          },
+          runningMode: 'IMAGE',
+          minDetectionConfidence: 0.5,
+        });
+        if (active) {
+          setDetector(det);
+          setIsAiLoading(false);
+        } else {
+          det.close();
+        }
+      } catch (err) {
+        console.warn('Failed to initialize FaceDetector in modal:', err);
+        if (active) setIsAiLoading(false);
+      }
+    };
+    initDetector();
+    return () => {
+      active = false;
+    };
+  }, []);
 
   // ── Start webcam ─────────────────────────────────────────────────────────────
   // The <video> element is always in the DOM so videoRef is available immediately.
@@ -77,7 +114,50 @@ const FaceCheckModal = ({ onReady, roundName = 'Test', sessionId = '' }) => {
       if (video && canvas) {
         canvas.width  = video.videoWidth  || 640;
         canvas.height = video.videoHeight || 480;
-        canvas.getContext('2d').drawImage(video, 0, 0);
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(video, 0, 0);
+
+        if (detector) {
+          try {
+            const results = detector.detect(canvas);
+            const detections = results?.detections || [];
+            
+            if (detections.length === 0) {
+              setErrorMsg('No face detected. Please position your face inside the oval and try again.');
+              setStep('preview');
+              setCountdown(null);
+              return;
+            }
+            
+            if (detections.length > 1) {
+              setErrorMsg('Multiple faces detected. Only one person should be visible in the frame.');
+              setStep('preview');
+              setCountdown(null);
+              return;
+            }
+            
+            const box = detections[0].boundingBox;
+            if (box) {
+              const centerX = (box.originX + box.width / 2) / canvas.width;
+              const centerY = (box.originY + box.height / 2) / canvas.height;
+              
+              // Oval bounds check: centerX in [0.30, 0.70] and centerY in [0.20, 0.80]
+              const isXValid = centerX >= 0.30 && centerX <= 0.70;
+              const isYValid = centerY >= 0.20 && centerY <= 0.80;
+              
+              if (!isXValid || !isYValid) {
+                setErrorMsg('Verification failed: Please center your face inside the dashed oval guide.');
+                setStep('preview');
+                setCountdown(null);
+                return;
+              }
+            }
+          } catch (e) {
+            console.error('AI Verification error:', e);
+          }
+        }
+
+        setErrorMsg('');
         setCapturedImg(canvas.toDataURL('image/jpeg', 0.85));
         setStep('captured');
       }
@@ -86,7 +166,7 @@ const FaceCheckModal = ({ onReady, roundName = 'Test', sessionId = '' }) => {
     }
     const t = setTimeout(() => setCountdown(c => c - 1), 1000);
     return () => clearTimeout(t);
-  }, [countdown]);
+  }, [countdown, detector]);
 
   // ── Confirm and hand off ─────────────────────────────────────────────────────
   const handleRetake = () => { setCapturedImg(null); setStep('preview'); };
@@ -243,6 +323,26 @@ const FaceCheckModal = ({ onReady, roundName = 'Test', sessionId = '' }) => {
         {/* Hidden canvas for snapshot */}
         <canvas ref={canvasRef} style={{ display: 'none' }} />
 
+        {/* Verification Error Alert */}
+        {errorMsg && step === 'preview' && (
+          <div style={{
+            background: 'rgba(239, 68, 68, 0.15)',
+            border: '1px solid rgba(239, 68, 68, 0.4)',
+            backdropFilter: 'blur(8px)',
+            borderRadius: 12,
+            padding: '12px 16px',
+            marginBottom: 20,
+            color: '#fca5a5',
+            fontSize: '0.85rem',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10
+          }}>
+            <span style={{ fontSize: '1.1rem' }}>⚠️</span>
+            <span>{errorMsg}</span>
+          </div>
+        )}
+
         {/* Instructions */}
         {step === 'preview' && (
           <div style={{ background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.2)', borderRadius: 10, padding: '12px 16px', marginBottom: 20 }}>
@@ -258,13 +358,19 @@ const FaceCheckModal = ({ onReady, roundName = 'Test', sessionId = '' }) => {
         {/* Actions */}
         <div style={{ display: 'flex', gap: 12 }}>
           {step === 'preview' && countdown === null && (
-            <button onClick={startCapture} style={{
-              flex: 1, padding: '13px 0', borderRadius: 10, border: 'none',
-              background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
-              color: '#fff', fontWeight: 700, fontSize: '0.95rem', cursor: 'pointer',
-              boxShadow: '0 4px 20px rgba(99,102,241,0.4)',
-            }}>
-              📸 Capture Reference Photo
+            <button 
+              onClick={startCapture} 
+              disabled={isAiLoading}
+              style={{
+                flex: 1, padding: '13px 0', borderRadius: 10, border: 'none',
+                background: isAiLoading ? 'rgba(99,102,241,0.3)' : 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                color: isAiLoading ? '#a5b4fc' : '#fff', 
+                fontWeight: 700, fontSize: '0.95rem', 
+                cursor: isAiLoading ? 'not-allowed' : 'pointer',
+                boxShadow: isAiLoading ? 'none' : '0 4px 20px rgba(99,102,241,0.4)',
+              }}
+            >
+              {isAiLoading ? '⏳ Initializing AI...' : '📸 Capture Reference Photo'}
             </button>
           )}
 

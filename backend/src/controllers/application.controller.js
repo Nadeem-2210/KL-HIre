@@ -5,13 +5,78 @@ const fs = require('fs');
 const path = require('path');
 const axios = require('axios');
 const FormData = require('form-data');
+const pdfParse = require('pdf-parse');
+const mammoth = require('mammoth');
 const { getFileUrl } = require('../services/storage.service');
 const { skipsCodingRound, finalScoreFromApplication } = require('../utils/applicationScores');
 
 const JOB_POPULATE_MINIMAL =
   'title domain resumeThreshold mcqThreshold codingThreshold resumeWeight mcqWeight codingWeight mcqCount mcqDuration codingDuration isActive';
 
+// Helper to extract text from resume buffer
+const extractTextFromResume = async (fileObj) => {
+  try {
+    let buffer;
+    if (fileObj.location) {
+      // S3
+      const s3Response = await axios.get(fileObj.location, { responseType: 'arraybuffer' });
+      buffer = Buffer.from(s3Response.data);
+    } else {
+      // Local
+      buffer = fs.readFileSync(fileObj.path);
+    }
 
+    const mime = fileObj.mimetype || '';
+    const filename = fileObj.originalname || '';
+
+    if (mime.includes('pdf') || filename.toLowerCase().endsWith('.pdf')) {
+      const parsed = await pdfParse(buffer);
+      return parsed.text || '';
+    } else if (
+      mime.includes('word') || 
+      mime.includes('officedocument') || 
+      filename.toLowerCase().endsWith('.docx') || 
+      filename.toLowerCase().endsWith('.doc')
+    ) {
+      const parsed = await mammoth.extractRawText({ buffer });
+      return parsed.value || '';
+    }
+    return '';
+  } catch (err) {
+    console.error('Error extracting text from resume:', err);
+    return '';
+  }
+};
+
+// Helper to calculate local keyword score
+const calculateLocalKeywordScore = (text, requiredSkills) => {
+  if (!requiredSkills || requiredSkills.length === 0) {
+    return { score: 100, matchedCount: 0, matchedSkills: [], missingSkills: [] };
+  }
+  const cleanText = text.toLowerCase();
+  const matchedSkills = [];
+  const missingSkills = [];
+
+  requiredSkills.forEach(skill => {
+    const escaped = skill.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+    const regex = new RegExp(`\\b${escaped}\\b`, 'i');
+    if (regex.test(cleanText) || cleanText.includes(skill.toLowerCase())) {
+      matchedSkills.push(skill);
+    } else {
+      missingSkills.push(skill);
+    }
+  });
+
+  const matchedCount = matchedSkills.length;
+  const score = Math.round((matchedCount / requiredSkills.length) * 100);
+
+  return {
+    score,
+    matchedCount,
+    matchedSkills,
+    missingSkills
+  };
+};
 
 // ─── External ATS API Integration ─────────────────────────────────────────────
 const mapDomainToATS = (domain) => {
@@ -46,7 +111,17 @@ const mapDomainToATS = (domain) => {
   return 'MERN Developer'; // Default fallback
 };
 
-const parseResumeAndScore = async (fileObj, jobDomain) => {
+const parseResumeAndScore = async (fileObj, jobDomain, requiredSkills = []) => {
+  // 1. Extract text first for local scoring
+  const extractedText = await extractTextFromResume(fileObj);
+  const localResult = calculateLocalKeywordScore(extractedText, requiredSkills);
+
+  // 2. Call external ATS API
+  let extScore = 0;
+  let extMatched = [];
+  let extMissing = [];
+  let extFailed = false;
+
   try {
     const atsDomain = mapDomainToATS(jobDomain);
     const form = new FormData();
@@ -57,31 +132,54 @@ const parseResumeAndScore = async (fileObj, jobDomain) => {
       form.append('resume', s3Response.data, { filename: fileObj.originalname, contentType: fileObj.mimetype });
     } else {
       // Read from local
-      form.append('resume', fs.createReadStream(fileObj.path));
+      form.append('resume', fs.createReadStream(fileObj.path), { filename: fileObj.originalname, contentType: fileObj.mimetype });
     }
     
     form.append('domain', atsDomain);
 
-    const response = await axios.post('https://atsscorer-production.up.railway.app/analyze', form, {
+    const atsUrl = process.env.ATS_API_URL || 'https://atsscorer-production.up.railway.app/analyze';
+    const response = await axios.post(atsUrl, form, {
       headers: {
         ...form.getHeaders(),
       },
+      timeout: 15000,
     });
 
-    // The API returns a score as a string or number. Let's ensure it's a number.
-    // Assuming the response is { "score": 85, ... } or { "total_score": 85, ... }
     const score = response.data.score || response.data.total_score || response.data.ats_score || 0;
-
-    return {
-      score: Number(score),
-      matchedSkills: response.data.matched_skills || [],
-      missingSkills: response.data.missing_skills || []
-    };
+    extScore = Number(score);
+    extMatched = response.data.matched_skills || [];
+    extMissing = response.data.missing_skills || [];
   } catch (err) {
-    console.error('External ATS API error:', err.response?.data || err.message);
-    // Fallback: return 0 score if API fails
-    return { score: 0, matchedSkills: [], missingSkills: [] };
+    console.error('External ATS API error, falling back to local parsing:', err.response?.data || err.message);
+    extFailed = true;
   }
+
+  let finalScore = 0;
+  let finalMatched = [];
+  let finalMissing = [];
+
+  if (extFailed) {
+    // Graceful fallback to pure local keyword match score
+    finalScore = localResult.score;
+    finalMatched = localResult.matchedSkills;
+    finalMissing = localResult.missingSkills;
+  } else {
+    // Blend: 70% external ATS, 30% local matching
+    finalScore = Math.round((extScore * 0.7) + (localResult.score * 0.3));
+    finalMatched = Array.from(new Set([...extMatched, ...localResult.matchedSkills]));
+    finalMissing = Array.from(new Set([...extMissing, ...localResult.missingSkills])).filter(s => !finalMatched.includes(s));
+  }
+
+  // Capping Logic: If 0 skills matched from job's required skills, hard-cap to 25%
+  if (requiredSkills.length > 0 && localResult.matchedCount === 0) {
+    finalScore = Math.min(finalScore, 25);
+  }
+
+  return {
+    score: finalScore,
+    matchedSkills: finalMatched,
+    missingSkills: finalMissing
+  };
 };
 
 // ─── Candidate: Apply for Job ──────────────────────────────────────────────────
@@ -107,7 +205,7 @@ exports.applyForJob = async (req, res) => {
       return res.status(400).json({ success: false, error: 'Resume file (PDF or Word) is required' });
     }
 
-    const { score, matchedSkills, missingSkills } = await parseResumeAndScore(req.file, job.domain);
+    const { score, matchedSkills, missingSkills } = await parseResumeAndScore(req.file, job.domain, job.requiredSkills || []);
     const isPassed = score >= job.resumeThreshold;
     const status = isPassed ? 'mcq_pending' : 'resume_rejected';
 
@@ -238,7 +336,7 @@ exports.submitMCQ = async (req, res) => {
     application.scores.mcq = { score, answers: evaluatedAnswers };
 
     const jobDomain = application.jobId?.domain;
-    if (isPassed && skipsCodingRound(jobDomain)) {
+    if (isPassed && (skipsCodingRound(application.jobId) || skipsCodingRound(jobDomain))) {
       application.scores.coding = { score: 0 };
       application.scores.finalScore = finalScoreFromApplication(application, 0);
       application.status = 'coding_passed';

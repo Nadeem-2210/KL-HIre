@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const CodingQuestion = require('../models/CodingQuestion');
 const Application = require('../models/Application');
 const { processSignature } = require('../services/signatureParser.service');
@@ -22,6 +23,7 @@ const buildPayload = (body) => {
     driverCode: manualDriverCode,
     supportedLanguages,
     testCases,
+    domain,
   } = body;
 
   const langs = supportedLanguages?.length
@@ -52,6 +54,7 @@ const buildPayload = (body) => {
     title,
     description,
     difficulty: difficulty || 'medium',
+    domain: domain || 'All',
     constraints: Array.isArray(constraints) ? constraints : (constraints ? constraints.split('\n').filter(Boolean) : []),
     signature: finalSignature,
     parsedSignature: finalParsed,
@@ -130,16 +133,92 @@ exports.previewSignature = (req, res) => {
   }
 };
 
+// ─── Helper: pick random questions matching domain & difficulties prioritized ───
+const pickRandomQuestions = async (jobDomain, difficulties, count, excludeIds = []) => {
+  const selected = [];
+  const selectedIds = new Set(excludeIds.map(id => id.toString()));
+
+  const sample = async (matchQuery, size) => {
+    if (size <= 0) return [];
+    return await CodingQuestion.aggregate([
+      {
+        $match: {
+          ...matchQuery,
+          isActive: true,
+          _id: { $nin: Array.from(selectedIds).map(id => new mongoose.Types.ObjectId(id)) }
+        }
+      },
+      { $sample: { size } }
+    ]);
+  };
+
+  const diffQuery = difficulties && difficulties.length > 0 ? { difficulty: { $in: difficulties } } : {};
+
+  // Step 1: Job-specific domain + difficulty
+  if (jobDomain && jobDomain !== 'All') {
+    const matches = await sample({ domain: jobDomain, ...diffQuery }, count - selected.length);
+    matches.forEach(q => {
+      selected.push(q);
+      selectedIds.add(q._id.toString());
+    });
+  }
+
+  // Step 2: Generic domain + difficulty
+  if (selected.length < count) {
+    const matches = await sample({
+      $or: [ { domain: 'All' }, { domain: { $exists: false } }, { domain: '' }, { domain: null } ],
+      ...diffQuery
+    }, count - selected.length);
+    matches.forEach(q => {
+      selected.push(q);
+      selectedIds.add(q._id.toString());
+    });
+  }
+
+  // Step 3: Job-specific domain + any difficulty
+  if (selected.length < count && jobDomain && jobDomain !== 'All') {
+    const matches = await sample({ domain: jobDomain }, count - selected.length);
+    matches.forEach(q => {
+      selected.push(q);
+      selectedIds.add(q._id.toString());
+    });
+  }
+
+  // Step 4: Generic domain + any difficulty
+  if (selected.length < count) {
+    const matches = await sample({
+      $or: [ { domain: 'All' }, { domain: { $exists: false } }, { domain: '' }, { domain: null } ]
+    }, count - selected.length);
+    matches.forEach(q => {
+      selected.push(q);
+      selectedIds.add(q._id.toString());
+    });
+  }
+
+  // Step 5: Absolute fallback (any active question)
+  if (selected.length < count) {
+    const matches = await sample({}, count - selected.length);
+    matches.forEach(q => {
+      selected.push(q);
+      selectedIds.add(q._id.toString());
+    });
+  }
+
+  return selected;
+};
+
 // ─── Candidate Route ──────────────────────────────────────────────────────────
 
-/** GET /coding-questions/round — 3 random active questions for the candidate */
+/** GET /coding-questions/round — random active questions for the candidate */
 exports.getRoundQuestions = async (req, res) => {
   try {
     const { appId } = req.query;
     let questions = [];
 
     if (appId) {
-      const app = await Application.findById(appId);
+      const app = await Application.findById(appId).populate('jobId');
+      const plannedCount = app?.jobId?.codingCount || 3;
+
       if (app && app.scores?.coding?.questions && app.scores.coding.questions.length > 0) {
         // Questions already exist for this application, fetch them exactly as they are
         questions = await Promise.all(
@@ -148,16 +227,41 @@ exports.getRoundQuestions = async (req, res) => {
         questions = questions.filter(Boolean); // Filter in case a question was deleted
       } 
       
-      // If we don't have exactly 3 questions yet, pick 1E, 1M, 1H
-      if (app && questions.length < 3) {
-        const easy   = await CodingQuestion.aggregate([{ $match: { difficulty: 'easy', isActive: true } }, { $sample: { size: 1 } }]);
-        const medium = await CodingQuestion.aggregate([{ $match: { difficulty: 'medium', isActive: true } }, { $sample: { size: 1 } }]);
-        const hard   = await CodingQuestion.aggregate([{ $match: { difficulty: 'hard', isActive: true } }, { $sample: { size: 1 } }]);
+      // If we don't have enough questions yet, pick based on job config
+      if (app && questions.length < plannedCount) {
+        const jobDomain = app.jobId?.domain;
+        const codingDifficulty = app.jobId?.codingDifficulty || 'mixed';
+        const neededCount = plannedCount - questions.length;
 
-        const selected = [];
-        if (easy[0])   selected.push(easy[0]);
-        if (medium[0]) selected.push(medium[0]);
-        if (hard[0])   selected.push(hard[0]);
+        let selected = [...questions];
+
+        if (codingDifficulty === 'mixed') {
+          // Pick slot-based balanced mix of Easy, Medium, Hard
+          for (let i = questions.length; i < plannedCount; i++) {
+            let diffs = ['easy'];
+            if (i % 3 === 1) diffs = ['medium'];
+            if (i % 3 === 2) diffs = ['hard'];
+
+            const picked = await pickRandomQuestions(jobDomain, diffs, 1, selected.map(q => q._id));
+            if (picked[0]) {
+              selected.push(picked[0]);
+            } else {
+              const fallbackPicked = await pickRandomQuestions(jobDomain, [], 1, selected.map(q => q._id));
+              if (fallbackPicked[0]) {
+                selected.push(fallbackPicked[0]);
+              }
+            }
+          }
+        } else {
+          // Pick based on specific selected difficulty configuration
+          let allowedDiffs = [codingDifficulty];
+          if (codingDifficulty === 'easy-medium') {
+            allowedDiffs = ['easy', 'medium'];
+          }
+
+          const picked = await pickRandomQuestions(jobDomain, allowedDiffs, neededCount, selected.map(q => q._id));
+          selected = selected.concat(picked);
+        }
 
         if (selected.length > 0) {
           // Force save to database to LOCK these questions to this application/candidate

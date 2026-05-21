@@ -20,7 +20,7 @@ const proctoringLogSchema = new mongoose.Schema(
     },
     severity: {
       type: String,
-      enum: ['low', 'medium', 'high'],
+      enum: ['low', 'medium', 'high', 'critical'],
       default: 'high',
     },
     screenshot: {
