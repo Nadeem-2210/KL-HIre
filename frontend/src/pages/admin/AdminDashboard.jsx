@@ -11,6 +11,7 @@ const JobsTab = () => {
   const [showForm, setShowForm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState({
     title: '', domain: '', description: '', skills: '',
     resumeThreshold: 60, mcqThreshold: 70, codingThreshold: 50,
@@ -31,19 +32,55 @@ const JobsTab = () => {
   };
   useEffect(() => { fetchJobs(); }, []);
 
+  const handleEdit = (job) => {
+    setForm({
+      title: job.title,
+      domain: job.domain,
+      description: job.description,
+      skills: job.requiredSkills.join(', '),
+      resumeThreshold: job.resumeThreshold,
+      mcqThreshold: job.mcqThreshold,
+      codingThreshold: job.codingThreshold,
+      resumeWeight: job.resumeWeight,
+      mcqWeight: job.mcqWeight,
+      codingWeight: job.codingWeight,
+      mcqCount: job.mcqCount || 20,
+      mcqDuration: job.mcqDuration || 30,
+      codingDuration: job.codingDuration || 60,
+    });
+    setEditingId(job._id);
+    setShowForm(true);
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSubmitting(true); setError('');
+
+    const totalWeight = Number(form.resumeWeight) + Number(form.mcqWeight) + Number(form.codingWeight);
+    if (totalWeight !== 100) {
+      setError(`Weights must sum up to 100. (Current sum: ${totalWeight}%)`);
+      setSubmitting(false);
+      return;
+    }
+
     try {
-      await api.post('/jobs', {
+      const payload = {
         ...form,
         requiredSkills: form.skills.split(',').map(s => s.trim()).filter(Boolean),
-      });
+      };
+
+      if (editingId) {
+        await api.put(`/jobs/${editingId}`, payload);
+      } else {
+        await api.post('/jobs', payload);
+      }
+
       setShowForm(false);
+      setEditingId(null);
       setForm({ title: '', domain: '', description: '', skills: '', resumeThreshold: 60, mcqThreshold: 70, codingThreshold: 50, resumeWeight: 30, mcqWeight: 30, codingWeight: 40, mcqCount: 20, mcqDuration: 30, codingDuration: 60 });
       fetchJobs();
     } catch (err) {
-      setError(err.response?.data?.error || 'Failed to create job');
+      setError(err.response?.data?.error || 'Failed to save job');
     } finally {
       setSubmitting(false);
     }
@@ -69,14 +106,20 @@ const JobsTab = () => {
             Show Deactivated
           </label>
         </div>
-        <button className="btn btn-primary" onClick={() => setShowForm(v => !v)}>
+        <button className="btn btn-primary" onClick={() => {
+          if (!showForm) {
+            setEditingId(null);
+            setForm({ title: '', domain: '', description: '', skills: '', resumeThreshold: 60, mcqThreshold: 70, codingThreshold: 50, resumeWeight: 30, mcqWeight: 30, codingWeight: 40, mcqCount: 20, mcqDuration: 30, codingDuration: 60 });
+          }
+          setShowForm(v => !v);
+        }}>
           {showForm ? 'Cancel' : '+ Create Job'}
         </button>
       </div>
 
       {showForm && (
         <div className="card" style={{ marginBottom: 24 }}>
-          <h3 style={{ marginBottom: 20, fontSize: '1rem' }}>New Job Posting</h3>
+          <h3 style={{ marginBottom: 20, fontSize: '1rem' }}>{editingId ? 'Edit Job Settings' : 'New Job Posting'}</h3>
           {error && <div className="alert alert-danger" style={{ marginBottom: 16 }}>{error}</div>}
           <form onSubmit={handleSubmit}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
@@ -146,9 +189,9 @@ const JobsTab = () => {
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-              <button type="button" className="btn btn-secondary" onClick={() => setShowForm(false)}>Cancel</button>
+              <button type="button" className="btn btn-secondary" onClick={() => { setShowForm(false); setEditingId(null); setForm({ title: '', domain: '', description: '', skills: '', resumeThreshold: 60, mcqThreshold: 70, codingThreshold: 50, resumeWeight: 30, mcqWeight: 30, codingWeight: 40, mcqCount: 20, mcqDuration: 30, codingDuration: 60 }); }}>Cancel</button>
               <button type="submit" className="btn btn-primary" disabled={submitting}>
-                {submitting ? 'Creating...' : 'Create Job'}
+                {submitting ? (editingId ? 'Saving...' : 'Creating...') : (editingId ? 'Save Changes' : 'Create Job')}
               </button>
             </div>
           </form>
@@ -222,6 +265,13 @@ const JobsTab = () => {
                     style={{ width: '100%', fontSize: '0.8rem', padding: '6px 0', border: '1px solid var(--border)', background: 'var(--bg-secondary)', color: 'var(--text-primary)' }}
                   >
                     👁 View Applicants
+                  </button>
+                  <button
+                    className="btn btn-secondary"
+                    onClick={() => handleEdit(job)}
+                    style={{ width: '100%', fontSize: '0.8rem', padding: '6px 0', border: '1px solid var(--border)', background: 'var(--bg-secondary)', color: 'var(--text-primary)' }}
+                  >
+                    ✏️ Edit Settings
                   </button>
                   <button onClick={() => toggle(job)} style={{ background: 'none', border: 'none', color: 'var(--text-primary)', fontSize: '0.8rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontWeight: 500 }}>
                     {job.isActive ? 'Deactivate ⏻' : 'Activate ⏻'}
@@ -945,6 +995,12 @@ const CandidateDetail = ({ appId, onBack }) => {
             {app.status === 'coding_failed' && (
               <button className="btn btn-primary btn-sm" onClick={() => handleOverride('retry_coding')} disabled={generating}>
                 🔄 Allow Coding Retry
+              </button>
+            )}
+
+            {(app.status === 'coding_pending' || app.status === 'coding_failed') && (
+              <button className="btn btn-secondary btn-sm" onClick={() => handleOverride('skip_coding')} disabled={generating}>
+                ⏩ Skip Coding Round
               </button>
             )}
           </div>

@@ -38,7 +38,7 @@ const ApplicationFlow = () => {
 
   const handleApply = async (e) => {
     e.preventDefault();
-    if (!resume) return setError('Please upload your resume (PDF)');
+    if (!resume) return setError('Please upload your resume (PDF, DOC, or DOCX)');
     setApplying(true);
     setError('');
     
@@ -76,10 +76,10 @@ const ApplicationFlow = () => {
           {error && <div className="alert alert-danger">{error}</div>}
           
           <div className="form-group">
-            <label>Resume (PDF only)</label>
+            <label>Resume (PDF, DOC, or DOCX)</label>
             <input 
               type="file" 
-              accept=".pdf" 
+              accept=".pdf,.doc,.docx" 
               onChange={e => setResume(e.target.files[0])} 
               className="input" 
               style={{ padding: 8 }}

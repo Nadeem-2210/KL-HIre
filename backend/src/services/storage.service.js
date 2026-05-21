@@ -52,7 +52,7 @@ const localStorage = multer.diskStorage({
       subDir = 'transcripts';
     } else if (file.mimetype.startsWith('audio')) {
       subDir = 'audio';
-    } else if (file.mimetype === 'application/pdf') {
+    } else if (['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'].includes(file.mimetype)) {
       subDir = 'resumes';
     } else {
       subDir = 'recordings';
@@ -75,7 +75,7 @@ const s3Storage = (STORAGE_TYPE === 's3' && s3) ? multerS3({
   },
   key: (req, file, cb) => {
     const subDir = file.mimetype === 'text/plain' ? 'transcripts' : 
-                   file.mimetype === 'application/pdf' ? 'resumes' :
+                   ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'].includes(file.mimetype) ? 'resumes' :
                    file.mimetype.startsWith('audio') ? 'audio' : 'recordings';
     const ext = path.extname(file.originalname) || '';
     const key = `${subDir}/${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`;
