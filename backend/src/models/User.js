@@ -52,6 +52,19 @@ const userSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    status: {
+      type: String,
+      enum: ['pending', 'approved', 'rejected'],
+      default: 'pending',
+    },
+    isTemporaryPassword: {
+      type: Boolean,
+      default: false,
+    },
+    temporaryPasswordExpiresAt: {
+      type: Date,
+      default: null,
+    },
   },
   { timestamps: true }
 );

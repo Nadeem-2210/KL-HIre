@@ -82,6 +82,23 @@ const start = async () => {
   try {
     await connectDB();
     
+    // Seed admin if none exists
+    const User = require('./models/User');
+    const adminEmail = process.env.ADMIN_EMAIL || 'admin@klhire.local';
+    const adminPassword = process.env.ADMIN_PASSWORD || 'password123';
+    
+    const adminExists = await User.findOne({ email: adminEmail });
+    if (!adminExists) {
+      await User.create({
+        name: 'Admin User',
+        email: adminEmail,
+        password: adminPassword,
+        role: 'admin',
+        status: 'approved'
+      });
+      console.log(`✅ Default admin user seeded (${adminEmail} / ${adminPassword})`);
+    }
+    
     // Ensure directories exist (wrapped in try-catch for read-only environments like Vercel)
     const dirs = ['uploads/reports', 'uploads/temp'];
     dirs.forEach(d => {

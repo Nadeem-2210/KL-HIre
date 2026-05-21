@@ -10,11 +10,12 @@ import MCQTest from './pages/candidate/MCQTest';
 import CodeEvalRound from './pages/candidate/CodeEvalRound';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import AdminRegister from './pages/AdminRegister';
+import PendingApproval from './pages/PendingApproval';
 
 import './index.css';
 
 // ─── Protected Route ──────────────────────────────────────────────────────────
-const ProtectedRoute = ({ children, roles }) => {
+const ProtectedRoute = ({ children, roles, allowTempPassword }) => {
   const { user, loading } = useAuth();
 
   if (loading) {
@@ -32,7 +33,11 @@ const ProtectedRoute = ({ children, roles }) => {
     }
     return <Navigate to="/login" replace />;
   }
-  
+
+  if (user.role === 'candidate' && user.status === 'pending') {
+    return <Navigate to="/pending-approval" replace />;
+  }
+
   if (roles && !roles.includes(user.role)) {
     return <Navigate to={user.role === 'candidate' ? '/dashboard' : '/admin'} replace />;
   }
@@ -50,6 +55,7 @@ const AppRouter = () => {
       <Route path="/admin/login" element={<AdminLogin />} />
       <Route path="/admin/register" element={<AdminRegister />} />
       <Route path="/register" element={<CandidateRegister />} />
+      <Route path="/pending-approval" element={<PendingApproval />} />
       {/* Legacy links bridging to candidate router */}
       <Route path="/register/candidate" element={<Navigate to="/register" replace />} />
       <Route path="/join" element={<Navigate to="/login" replace />} />
