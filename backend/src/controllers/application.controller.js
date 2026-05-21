@@ -137,7 +137,8 @@ const parseResumeAndScore = async (fileObj, jobDomain, requiredSkills = []) => {
     
     form.append('domain', atsDomain);
 
-    const response = await axios.post('https://atsscorer-production.up.railway.app/analyze', form, {
+    const atsUrl = process.env.ATS_API_URL || 'https://atsscorer-production.up.railway.app/analyze';
+    const response = await axios.post(atsUrl, form, {
       headers: {
         ...form.getHeaders(),
       },
