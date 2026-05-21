@@ -30,6 +30,7 @@ const useFaceProctor = ({
   const lastDetectRef = useRef(0);
   const lastViolationTimeRef = useRef(0); // For 5s cooldown
   const lookAwayStartRef = useRef(null);
+  const downwardGazeStartRef = useRef(null);
 
   const onViolationRef = useRef(onViolation);
   const onAutoSubmitRef = useRef(onAutoSubmit);
@@ -177,6 +178,16 @@ const useFaceProctor = ({
           }
         } else {
           lookAwayStartRef.current = null;
+        }
+
+        // Downward gaze heuristic for mobile detection (3 seconds sustained)
+        if (centerY > 0.58) {
+          if (!downwardGazeStartRef.current) downwardGazeStartRef.current = Date.now();
+          if (Date.now() - downwardGazeStartRef.current > 3000) {
+            triggerViolation('mobile_usage_suspected', 'Sustained downward gaze detected — mobile usage suspected.');
+          }
+        } else {
+          downwardGazeStartRef.current = null;
         }
       }
 

@@ -1180,6 +1180,9 @@ const CodingQuestionsTab = () => {
   const [editing, setEditing] = React.useState(null);
   const [saving, setSaving] = React.useState(false);
   const [error, setError] = React.useState('');
+  const [jobs, setJobs] = React.useState([]);
+  const [selectedJobId, setSelectedJobId] = React.useState('All');
+  const [selectedDomain, setSelectedDomain] = React.useState('All');
 
   // ── Form state ────────────────────────────────────────────────────────────
   const [form, setForm] = React.useState({
@@ -1211,7 +1214,15 @@ const CodingQuestionsTab = () => {
     setLoading(true);
     api.get('/coding-questions').then(r => setQuestions(r.data.data)).finally(() => setLoading(false));
   };
-  React.useEffect(() => { fetchQuestions(); }, []);
+
+  const fetchJobs = () => {
+    api.get('/jobs').then(r => setJobs(r.data.data || [])).catch(err => console.error("Failed to fetch jobs", err));
+  };
+
+  React.useEffect(() => { 
+    fetchQuestions(); 
+    fetchJobs();
+  }, []);
 
   // ── Generate code from signature ──────────────────────────────────────────
   const handleGenerateCode = async () => {
@@ -1564,6 +1575,60 @@ const CodingQuestionsTab = () => {
         </div>
       )}
 
+      {/* ── Filters Row ─────────────────────────────────────────────────────── */}
+      {!showForm && (
+        <div style={{ 
+          display: 'flex', 
+          gap: 16, 
+          background: 'var(--bg-secondary)', 
+          border: '1px solid var(--border)', 
+          borderRadius: 10, 
+          padding: 16, 
+          marginBottom: 20, 
+          alignItems: 'center',
+          flexWrap: 'wrap'
+        }}>
+          <div style={{ flex: 1, minWidth: 200 }}>
+            <label style={{ fontWeight: 600, fontSize: '0.8rem', display: 'block', marginBottom: 6, color: 'var(--text-secondary)' }}>Filter by Job Role</label>
+            <select 
+              style={inputStyle} 
+              value={selectedJobId} 
+              onChange={e => {
+                const jobId = e.target.value;
+                setSelectedJobId(jobId);
+                if (jobId !== 'All') {
+                  const job = jobs.find(j => j._id === jobId);
+                  if (job) {
+                    setSelectedDomain(job.domain || 'All');
+                  }
+                }
+              }}
+            >
+              <option value="All">All Jobs (No filter)</option>
+              {jobs.map(j => (
+                <option key={j._id} value={j._id}>{j.title} ({j.domain})</option>
+              ))}
+            </select>
+          </div>
+          <div style={{ flex: 1, minWidth: 200 }}>
+            <label style={{ fontWeight: 600, fontSize: '0.8rem', display: 'block', marginBottom: 6, color: 'var(--text-secondary)' }}>Filter by Domain</label>
+            <select 
+              style={inputStyle} 
+              value={selectedDomain} 
+              onChange={e => {
+                setSelectedDomain(e.target.value);
+                setSelectedJobId('All'); // Reset job selection if domain filter changes manually
+              }}
+            >
+              <option value="All">All Domains</option>
+              {DOMAINS.map(d => (
+                <option key={d} value={d}>{d}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+      )}
+
       {/* ── Questions list ───────────────────────────────────────────────────── */}
       {loading ? (
         <div style={{ textAlign: 'center', padding: 40 }}><div className="spinner" /></div>
@@ -1572,48 +1637,64 @@ const CodingQuestionsTab = () => {
           <div style={{ fontSize: 40, marginBottom: 12 }}>💻</div>
           <p>No coding questions yet. Click "+ Add Question" to create the first one.</p>
         </div>
-      ) : (
-        <div style={{ display: 'grid', gap: 12 }}>
-          {questions.map(q => {
-            const isAuto = q.mode === 'auto';
-            const isLegacy = !q.mode && !q.signature;
-            const langs = q.supportedLanguages || [];
-            return (
-              <div key={q._id} style={{ border: '1px solid var(--border)', borderRadius: 10, padding: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16 }}>
-                <div style={{ flex: 1 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
-                    <span style={{ fontWeight: 700, fontSize: '0.95rem' }}>{q.title}</span>
-                    <span style={{ fontSize: '0.7rem', fontWeight: 700, color: diffColor[q.difficulty], background: `${diffColor[q.difficulty]}20`, padding: '2px 8px', borderRadius: 20, textTransform: 'capitalize' }}>{q.difficulty}</span>
-                    <span style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--text-secondary)', background: 'var(--bg-tertiary)', border: '1px solid var(--border)', padding: '2px 8px', borderRadius: 20 }}>🌐 {q.domain || 'All'}</span>
-                    {isAuto && <span style={{ fontSize: '0.65rem', fontWeight: 700, color: '#10b981', background: '#d1fae5', border: '1px solid #6ee7b7', padding: '2px 8px', borderRadius: 20 }}>🟢 Auto</span>}
-                    {!isAuto && !isLegacy && <span style={{ fontSize: '0.65rem', fontWeight: 700, color: '#f59e0b', background: '#fef3c7', border: '1px solid #fbbf24', padding: '2px 8px', borderRadius: 20 }}>🔴 Manual</span>}
-                    {isLegacy && <span style={{ fontSize: '0.65rem', fontWeight: 700, color: '#6b7280', background: '#f3f4f6', border: '1px solid #d1d5db', padding: '2px 8px', borderRadius: 20 }}>📂 Legacy</span>}
-                    <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{q.testCases?.length || 0} test case{q.testCases?.length !== 1 ? 's' : ''} ({(q.testCases || []).filter(t => t.isHidden).length} hidden)</span>
-                  </div>
-                  {q.signature && <div style={{ fontFamily: 'monospace', fontSize: '0.75rem', color: 'var(--text-muted)', background: 'var(--bg-secondary)', padding: '3px 10px', borderRadius: 6, display: 'inline-block', marginBottom: 6 }}>{q.signature}</div>}
-                  <p style={{ margin: 0, fontSize: '0.82rem', color: 'var(--text-muted)', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{q.description}</p>
-                  {langs.length > 0 && (
-                    <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 8 }}>
-                      {langs.map(lang => {
-                        const info = ALL_LANGUAGES.find(l => l.id === lang);
-                        return info ? (
-                          <span key={lang} style={{ fontSize: '0.65rem', fontWeight: 600, color: 'var(--text-muted)', background: 'var(--bg-secondary)', border: '1px solid var(--border)', padding: '2px 7px', borderRadius: 12 }}>
-                            {info.icon} {info.label}
-                          </span>
-                        ) : null;
-                      })}
+      ) : (() => {
+        const filtered = questions.filter(q => {
+          if (selectedDomain === 'All') return true;
+          return q.domain === selectedDomain || q.domain === 'All';
+        });
+
+        if (filtered.length === 0) {
+          return (
+            <div style={{ textAlign: 'center', padding: 48, color: 'var(--text-muted)', border: '1px dashed var(--border)', borderRadius: 10 }}>
+              <div style={{ fontSize: 40, marginBottom: 12 }}>🔍</div>
+              <p>No coding questions match the selected filter (Domain: {selectedDomain}).</p>
+            </div>
+          );
+        }
+
+        return (
+          <div style={{ display: 'grid', gap: 12 }}>
+            {filtered.map(q => {
+              const isAuto = q.mode === 'auto';
+              const isLegacy = !q.mode && !q.signature;
+              const langs = q.supportedLanguages || [];
+              return (
+                <div key={q._id} style={{ border: '1px solid var(--border)', borderRadius: 10, padding: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16 }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
+                      <span style={{ fontWeight: 700, fontSize: '0.95rem' }}>{q.title}</span>
+                      <span style={{ fontSize: '0.7rem', fontWeight: 700, color: diffColor[q.difficulty], background: `${diffColor[q.difficulty]}20`, padding: '2px 8px', borderRadius: 20, textTransform: 'capitalize' }}>{q.difficulty}</span>
+                      <span style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--text-secondary)', background: 'var(--bg-tertiary)', border: '1px solid var(--border)', padding: '2px 8px', borderRadius: 20 }}>🌐 {q.domain || 'All'}</span>
+                      {isAuto && <span style={{ fontSize: '0.65rem', fontWeight: 700, color: '#10b981', background: '#d1fae5', border: '1px solid #6ee7b7', padding: '2px 8px', borderRadius: 20 }}>🟢 Auto</span>}
+                      {!isAuto && !isLegacy && <span style={{ fontSize: '0.65rem', fontWeight: 700, color: '#f59e0b', background: '#fef3c7', border: '1px solid #fbbf24', padding: '2px 8px', borderRadius: 20 }}>🔴 Manual</span>}
+                      {isLegacy && <span style={{ fontSize: '0.65rem', fontWeight: 700, color: '#6b7280', background: '#f3f4f6', border: '1px solid #d1d5db', padding: '2px 8px', borderRadius: 20 }}>📂 Legacy</span>}
+                      <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{q.testCases?.length || 0} test case{q.testCases?.length !== 1 ? 's' : ''} ({(q.testCases || []).filter(t => t.isHidden).length} hidden)</span>
                     </div>
-                  )}
+                    {q.signature && <div style={{ fontFamily: 'monospace', fontSize: '0.75rem', color: 'var(--text-muted)', background: 'var(--bg-secondary)', padding: '3px 10px', borderRadius: 6, display: 'inline-block', marginBottom: 6 }}>{q.signature}</div>}
+                    <p style={{ margin: 0, fontSize: '0.82rem', color: 'var(--text-muted)', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{q.description}</p>
+                    {langs.length > 0 && (
+                      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 8 }}>
+                        {langs.map(lang => {
+                          const info = ALL_LANGUAGES.find(l => l.id === lang);
+                          return info ? (
+                            <span key={lang} style={{ fontSize: '0.65rem', fontWeight: 600, color: 'var(--text-muted)', background: 'var(--bg-secondary)', border: '1px solid var(--border)', padding: '2px 7px', borderRadius: 12 }}>
+                              {info.icon} {info.label}
+                            </span>
+                          ) : null;
+                        })}
+                      </div>
+                    )}
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+                    <button className="btn btn-secondary btn-sm" onClick={() => handleEdit(q)}>Edit</button>
+                    <button className="btn btn-sm" style={{ background: '#ef444420', color: '#ef4444', border: 'none', borderRadius: 6, padding: '6px 12px', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 600 }} onClick={() => handleDelete(q._id)}>Delete</button>
+                  </div>
                 </div>
-                <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
-                  <button className="btn btn-secondary btn-sm" onClick={() => handleEdit(q)}>Edit</button>
-                  <button className="btn btn-sm" style={{ background: '#ef444420', color: '#ef4444', border: 'none', borderRadius: 6, padding: '6px 12px', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 600 }} onClick={() => handleDelete(q._id)}>Delete</button>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
+              );
+            })}
+          </div>
+        );
+      })()}
     </div>
   );
 };
