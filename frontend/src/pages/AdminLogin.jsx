@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 
 const AdminLogin = () => {
   const [form, setForm] = useState({ email: '', password: '' });
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -88,16 +89,32 @@ const AdminLogin = () => {
 
           <div className="form-group">
             <label style={labelStyle}>Password</label>
-            <input
-              style={inputStyle}
-              type="password"
-              placeholder="••••••••"
-              value={form.password}
-              onChange={(e) => setForm({ ...form, password: e.target.value })}
-              required
-              minLength={6}
-              autoComplete="current-password"
-            />
+            <div style={{ position: 'relative' }}>
+              <input
+                style={{ ...inputStyle, paddingRight: 42 }}
+                type={showPassword ? 'text' : 'password'}
+                placeholder="••••••••"
+                value={form.password}
+                onChange={(e) => setForm({ ...form, password: e.target.value })}
+                required
+                minLength={6}
+                autoComplete="current-password"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(v => !v)}
+                style={{
+                  position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)',
+                  background: 'none', border: 'none', cursor: 'pointer',
+                  color: 'var(--text-muted)', fontSize: '1.1rem', padding: '2px 4px',
+                  lineHeight: 1,
+                }}
+                tabIndex={-1}
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+              >
+                {showPassword ? '🙈' : '👁️'}
+              </button>
+            </div>
           </div>
 
           <button

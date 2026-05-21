@@ -46,43 +46,162 @@ const mapDomainToATS = (domain) => {
   return 'MERN Developer'; // Default fallback
 };
 
-const parseResumeAndScore = async (fileObj, jobDomain) => {
+const localParseAndScore = async (fileObj, job) => {
+  let dataBuffer;
+  if (fileObj.location) {
+    const s3Response = await axios.get(fileObj.location, { responseType: 'arraybuffer' });
+    dataBuffer = Buffer.from(s3Response.data);
+  } else {
+    dataBuffer = fs.readFileSync(fileObj.path);
+  }
+
+  const ext = path.extname(fileObj.originalname).toLowerCase();
+  let text = '';
+
   try {
-    const atsDomain = mapDomainToATS(jobDomain);
+    if (ext === '.pdf') {
+      const pdfParse = require('pdf-parse');
+      const data = await pdfParse(dataBuffer);
+      text = data.text;
+    } else if (ext === '.docx') {
+      const mammoth = require('mammoth');
+      const result = await mammoth.extractRawText({ buffer: dataBuffer });
+      text = result.value;
+    } else if (ext === '.doc') {
+      // Basic fallback for old binary .doc format
+      const matches = dataBuffer.toString('binary').match(/[a-zA-Z0-9\s\-\.\,\@\:\/\#]{3,}/g);
+      text = matches ? matches.join(' ') : '';
+    } else {
+      // .txt or unknown
+      text = dataBuffer.toString('utf8');
+    }
+  } catch (e) {
+    console.error('Local extraction error:', e);
+  }
+
+  const domainSkills = {
+    'AI/ML Engineer': ['python', 'pytorch', 'tensorflow', 'scikit-learn', 'keras', 'machine learning', 'deep learning', 'nlp', 'computer vision', 'data science', 'pandas', 'numpy'],
+    'PHP Developer': ['php', 'laravel', 'symfony', 'codeigniter', 'mysql', 'wordpress', 'javascript', 'jquery', 'ajax', 'html', 'css'],
+    'Data Engineer': ['sql', 'python', 'spark', 'hadoop', 'etl', 'data warehouse', 'aws', 'gcp', 'airflow', 'kafka', 'database', 'scala'],
+    'Data Scientist': ['python', 'r', 'machine learning', 'pandas', 'numpy', 'statistics', 'sql', 'data analysis', 'visualization', 'jupyter'],
+    'DevOps': ['docker', 'kubernetes', 'jenkins', 'ci/cd', 'aws', 'terraform', 'ansible', 'linux', 'git', 'bash', 'prometheus', 'grafana'],
+    'MERN Developer': ['react', 'node.js', 'express', 'mongodb', 'javascript', 'redux', 'html', 'css', 'typescript', 'next.js'],
+    'Python Developer': ['python', 'django', 'flask', 'fastapi', 'sql', 'git', 'numpy', 'pandas', 'rest api', 'javascript'],
+    'Java Developer': ['java', 'spring', 'spring boot', 'hibernate', 'maven', 'gradle', 'mysql', 'microservices', 'junit', 'git'],
+    'DBA': ['sql', 'mysql', 'oracle', 'postgresql', 'sql server', 'database', 'backup', 'tuning', 'recovery', 'nosql', 'replication'],
+    'Cloud Engineer': ['aws', 'azure', 'gcp', 'cloud', 'terraform', 'iam', 'ec2', 's3', 'serverless', 'devops', 'kubernetes'],
+    'Network Engineer': ['cisco', 'routing', 'switching', 'vpn', 'firewall', 'dns', 'dhcp', 'tcp/ip', 'lan', 'wan', 'security', 'network'],
+    'Go Lang Developer': ['go', 'golang', 'goroutines', 'docker', 'kubernetes', 'grpc', 'rest api', 'sql', 'git', 'microservices'],
+    'Technical Support': ['troubleshooting', 'helpdesk', 'active directory', 'windows', 'linux', 'hardware', 'customer support', 'it support', 'networks'],
+    'Business Analyst': ['requirements', 'agile', 'scrum', 'sql', 'excel', 'jira', 'uml', 'use cases', 'data analysis', 'communication'],
+    '.NET Developer': ['.net', 'c#', 'asp.net', 'entity framework', 'sql server', 'mvc', 'web api', 'javascript', 'azure'],
+    'Data Analytics': ['sql', 'excel', 'tableau', 'power bi', 'python', 'r', 'data analysis', 'statistics', 'reporting', 'pandas'],
+    'QA (Quality Assurance)': ['testing', 'selenium', 'automation', 'manual testing', 'jest', 'cypress', 'qa', 'test cases', 'bug tracking', 'jira']
+  };
+
+  const domain = job.domain || 'MERN Developer';
+  const reqSkills = Array.isArray(job.requiredSkills) ? job.requiredSkills : [];
+  const matchedDomainSkills = domainSkills[domain] || domainSkills['MERN Developer'];
+
+
+
+
+  const normalizedText = text.toLowerCase();
+  const matched = [];
+  const missing = [];
+  const escapeRegExp = (string) => string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+  // Build unified target list: reqSkills first, then domain skills
+  const reqNorm = reqSkills.map(s => s.trim().toLowerCase()).filter(Boolean);
+  const domNorm = matchedDomainSkills.map(s => s.toLowerCase());
+
+  // Deduplicate: use Set, reqSkills take priority for display name
+  const allTargetNorm = Array.from(new Set([...reqNorm, ...domNorm]));
+
+  for (const skill of allTargetNorm) {
+    const escaped = escapeRegExp(skill);
+    const regexStr = (skill === 'c++') ? 'c\\+\\+' : (skill === 'c#') ? 'c#' : (skill === '.net') ? '\.net' : '\\b' + escaped + '\\b';
+    const regex = new RegExp(regexStr, 'i');
+    const displayName = reqSkills.find(s => s.toLowerCase() === skill) ||
+                        matchedDomainSkills.find(s => s.toLowerCase() === skill) || skill;
+    if (regex.test(normalizedText)) {
+      matched.push(displayName);
+    } else {
+      missing.push(displayName);
+    }
+  }
+
+  // ── Scoring ────────────────────────────────────────────────────────────────
+  let score;
+  if (reqNorm.length >= 3) {
+    // Primary: required skills weighted at 70%, domain skills at 30%
+    const reqMatched = matched.filter(s => reqNorm.includes(s.toLowerCase())).length;
+    const domMatched = matched.filter(s => !reqNorm.includes(s.toLowerCase())).length;
+    const reqScore   = reqNorm.length > 0 ? (reqMatched / reqNorm.length) * 70 : 70;
+    const domScore   = domNorm.length  > 0 ? (domMatched / domNorm.length)  * 30 : 30;
+    score = Math.round(reqScore + domScore);
+    // Only hard-cap if ZERO required skills matched (completely unrelated resume)
+    if (reqMatched === 0) score = Math.min(score, 30);
+  } else {
+    // Simple ratio when no/few required skills are defined by admin
+    score = allTargetNorm.length > 0
+      ? Math.round((matched.length / allTargetNorm.length) * 100)
+      : 85;
+  }
+
+  // Safety floor — if text extraction failed (very short text), avoid false rejection
+  if (text.length < 100) score = Math.max(score, job.resumeThreshold || 70);
+  // Safety floor for binary .doc files that may not parse well
+  if (text.length < 50 && ext === '.doc') score = Math.max(score, job.resumeThreshold || 70);
+
+  return {
+    score,
+    matchedSkills: matched,
+    missingSkills: missing
+  };
+};
+
+
+const parseResumeAndScore = async (fileObj, job) => {
+  try {
+    const atsDomain = mapDomainToATS(job.domain);
     const form = new FormData();
-    
+
     if (fileObj.location) {
       // Stream from S3
       const s3Response = await axios.get(fileObj.location, { responseType: 'stream' });
       form.append('resume', s3Response.data, { filename: fileObj.originalname, contentType: fileObj.mimetype });
     } else {
-      // Read from local
-      form.append('resume', fs.createReadStream(fileObj.path));
+      // Read from local disk
+      form.append('resume', fs.createReadStream(fileObj.path), { filename: fileObj.originalname, contentType: fileObj.mimetype });
     }
-    
+
     form.append('domain', atsDomain);
 
-    const response = await axios.post('https://atsscorer-production.up.railway.app/analyze', form, {
-      headers: {
-        ...form.getHeaders(),
-      },
+    const response = await axios.post('https://dhanesh-96-ats-scorer.hf.space/analyze', form, {
+      headers: { ...form.getHeaders() },
+      timeout: 30000, // 30s — HF Spaces can be slow on cold start
     });
 
-    // The API returns a score as a string or number. Let's ensure it's a number.
-    // Assuming the response is { "score": 85, ... } or { "total_score": 85, ... }
-    const score = response.data.score || response.data.total_score || response.data.ats_score || 0;
+    const data = response.data;
 
-    return {
-      score: Number(score),
-      matchedSkills: response.data.matched_skills || [],
-      missingSkills: response.data.missing_skills || []
-    };
+    // New API returns: ats_score, skills_found, skills_in_domain
+    const score = Number(data.ats_score ?? data.score ?? data.total_score ?? 0);
+
+    const matchedSkills = data.skills_found || [];
+    // Missing = domain skills that were NOT found in the resume
+    const domainSkills  = data.skills_in_domain || [];
+    const foundSet      = new Set(matchedSkills.map(s => s.toLowerCase()));
+    const missingSkills = domainSkills.filter(s => !foundSet.has(s.toLowerCase()));
+
+    return { score, matchedSkills, missingSkills };
+
   } catch (err) {
-    console.error('External ATS API error:', err.response?.data || err.message);
-    // Fallback: return 0 score if API fails
-    return { score: 0, matchedSkills: [], missingSkills: [] };
+    console.error('External ATS API error:', err.response?.data || err.message, '— falling back to local parser...');
+    return await localParseAndScore(fileObj, job);
   }
 };
+
 
 // ─── Candidate: Apply for Job ──────────────────────────────────────────────────
 // POST /api/applications/apply/:jobId
@@ -107,7 +226,7 @@ exports.applyForJob = async (req, res) => {
       return res.status(400).json({ success: false, error: 'Resume file (PDF or Word) is required' });
     }
 
-    const { score, matchedSkills, missingSkills } = await parseResumeAndScore(req.file, job.domain);
+    const { score, matchedSkills, missingSkills } = await parseResumeAndScore(req.file, job);
     const isPassed = score >= job.resumeThreshold;
     const status = isPassed ? 'mcq_pending' : 'resume_rejected';
 

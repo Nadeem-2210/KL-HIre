@@ -9,6 +9,7 @@ const JobsTab = () => {
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
+  const [editing, setEditing] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [editingId, setEditingId] = useState(null);
@@ -34,24 +35,41 @@ const JobsTab = () => {
 
   const handleEdit = (job) => {
     setForm({
-      title: job.title,
-      domain: job.domain,
-      description: job.description,
-      skills: job.requiredSkills.join(', '),
-      resumeThreshold: job.resumeThreshold,
-      mcqThreshold: job.mcqThreshold,
-      codingThreshold: job.codingThreshold,
-      resumeWeight: job.resumeWeight,
-      mcqWeight: job.mcqWeight,
-      codingWeight: job.codingWeight,
-      mcqCount: job.mcqCount || 20,
-      mcqDuration: job.mcqDuration || 30,
-      codingDuration: job.codingDuration || 60,
+      title: job.title || '',
+      domain: job.domain || '',
+      description: job.description || '',
+      skills: (job.requiredSkills || []).join(', '),
+      resumeThreshold: job.resumeThreshold ?? 60,
+      mcqThreshold: job.mcqThreshold ?? 70,
+      codingThreshold: job.codingThreshold ?? 50,
+      resumeWeight: job.resumeWeight ?? 30,
+      mcqWeight: job.mcqWeight ?? 30,
+      codingWeight: job.codingWeight ?? 40,
+      mcqCount: job.mcqCount ?? 20,
+      mcqDuration: job.mcqDuration ?? 30,
+      codingDuration: job.codingDuration ?? 60,
     });
     setEditingId(job._id);
     setShowForm(true);
   };
 
+  const handleToggleForm = () => {
+    if (showForm) {
+      setShowForm(false);
+      setEditingId(null);
+      setError('');
+    } else {
+      setForm({
+        title: '', domain: '', description: '', skills: '',
+        resumeThreshold: 60, mcqThreshold: 70, codingThreshold: 50,
+        resumeWeight: 30, mcqWeight: 30, codingWeight: 40,
+        mcqCount: 20, mcqDuration: 30, codingDuration: 60
+      });
+      setEditingId(null);
+      setError('');
+      setShowForm(true);
+    }
+  };
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSubmitting(true); setError('');
@@ -80,7 +98,7 @@ const JobsTab = () => {
       setForm({ title: '', domain: '', description: '', skills: '', resumeThreshold: 60, mcqThreshold: 70, codingThreshold: 50, resumeWeight: 30, mcqWeight: 30, codingWeight: 40, mcqCount: 20, mcqDuration: 30, codingDuration: 60 });
       fetchJobs();
     } catch (err) {
-      setError(err.response?.data?.error || 'Failed to save job');
+      setError(err.response?.data?.error || err.response?.data?.message || 'Failed to save job');
     } finally {
       setSubmitting(false);
     }
@@ -106,20 +124,14 @@ const JobsTab = () => {
             Show Deactivated
           </label>
         </div>
-        <button className="btn btn-primary" onClick={() => {
-          if (!showForm) {
-            setEditingId(null);
-            setForm({ title: '', domain: '', description: '', skills: '', resumeThreshold: 60, mcqThreshold: 70, codingThreshold: 50, resumeWeight: 30, mcqWeight: 30, codingWeight: 40, mcqCount: 20, mcqDuration: 30, codingDuration: 60 });
-          }
-          setShowForm(v => !v);
-        }}>
+        <button className="btn btn-primary" onClick={handleToggleForm}>
           {showForm ? 'Cancel' : '+ Create Job'}
         </button>
       </div>
 
       {showForm && (
         <div className="card" style={{ marginBottom: 24 }}>
-          <h3 style={{ marginBottom: 20, fontSize: '1rem' }}>{editingId ? 'Edit Job Settings' : 'New Job Posting'}</h3>
+          <h3 style={{ marginBottom: 20, fontSize: '1rem' }}>{editingId ? 'Edit Job Posting' : 'New Job Posting'}</h3>
           {error && <div className="alert alert-danger" style={{ marginBottom: 16 }}>{error}</div>}
           <form onSubmit={handleSubmit}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
@@ -189,9 +201,9 @@ const JobsTab = () => {
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-              <button type="button" className="btn btn-secondary" onClick={() => { setShowForm(false); setEditingId(null); setForm({ title: '', domain: '', description: '', skills: '', resumeThreshold: 60, mcqThreshold: 70, codingThreshold: 50, resumeWeight: 30, mcqWeight: 30, codingWeight: 40, mcqCount: 20, mcqDuration: 30, codingDuration: 60 }); }}>Cancel</button>
+              <button type="button" className="btn btn-secondary" onClick={() => { setShowForm(false); setEditingId(null); setError(''); }}>Cancel</button>
               <button type="submit" className="btn btn-primary" disabled={submitting}>
-                {submitting ? (editingId ? 'Saving...' : 'Creating...') : (editingId ? 'Save Changes' : 'Create Job')}
+                {submitting ? 'Saving...' : editingId ? 'Update Job' : 'Create Job'}
               </button>
             </div>
           </form>
@@ -258,20 +270,20 @@ const JobsTab = () => {
                 </div>
 
                 {/* Action Block */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'center', width: 140 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'center', width: 140 }}>
                   <button
                     className="btn btn-secondary"
                     onClick={() => handleViewMetrics(job)}
-                    style={{ width: '100%', fontSize: '0.8rem', padding: '6px 0', border: '1px solid var(--border)', background: 'var(--bg-secondary)', color: 'var(--text-primary)' }}
+                    style={{ width: '100%', fontSize: '0.8rem', padding: '5px 0', border: '1px solid var(--border)', background: 'var(--bg-secondary)', color: 'var(--text-primary)' }}
                   >
                     👁 View Applicants
                   </button>
                   <button
                     className="btn btn-secondary"
                     onClick={() => handleEdit(job)}
-                    style={{ width: '100%', fontSize: '0.8rem', padding: '6px 0', border: '1px solid var(--border)', background: 'var(--bg-secondary)', color: 'var(--text-primary)' }}
+                    style={{ width: '100%', fontSize: '0.8rem', padding: '5px 0', border: '1px solid var(--border)', background: 'var(--bg-secondary)', color: 'var(--text-primary)' }}
                   >
-                    ✏️ Edit Settings
+                    ✏️ Edit Job
                   </button>
                   <button onClick={() => toggle(job)} style={{ background: 'none', border: 'none', color: 'var(--text-primary)', fontSize: '0.8rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontWeight: 500 }}>
                     {job.isActive ? 'Deactivate ⏻' : 'Activate ⏻'}

@@ -55,13 +55,17 @@ exports.getJob = async (req, res) => {
 // @access  Private (Admin only)
 exports.updateJob = async (req, res) => {
   try {
-    const job = await Job.findByIdAndUpdate(req.params.id, req.body, {
-      new: true,
-      runValidators: true,
-    });
+    const job = await Job.findById(req.params.id);
     if (!job) {
       return res.status(404).json({ success: false, error: 'Job not found' });
     }
+    
+    // Update fields
+    Object.assign(job, req.body);
+    
+    // Save to trigger the pre('save') weights validation
+    await job.save();
+    
     res.status(200).json({ success: true, data: job });
   } catch (error) {
     res.status(400).json({ success: false, error: error.message });

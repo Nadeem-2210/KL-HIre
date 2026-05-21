@@ -182,7 +182,7 @@ const JobBoard = ({ myApplications, onApply }) => {
     if (!file) return;
     const ext = file.name.split('.').pop().toLowerCase();
     if (!['pdf', 'doc', 'docx'].includes(ext)) {
-      setError("Only resume files (PDF/DOC) are accepted");
+      setError("Only resume files (PDF/DOC/DOCX) are accepted");
       e.target.value = '';
       setResume(null);
       return;
@@ -193,10 +193,10 @@ const JobBoard = ({ myApplications, onApply }) => {
 
   const handleApplySubmit = async (e) => {
     e.preventDefault();
-    if (!resume) return setError('Please select your resume PDF');
+    if (!resume) return setError('Please select your resume (PDF / DOC / DOCX)');
     const ext = resume.name.split('.').pop().toLowerCase();
     if (!['pdf', 'doc', 'docx'].includes(ext)) {
-      return setError("Only resume files (PDF/DOC) are accepted");
+      return setError("Only resume files (PDF/DOC/DOCX) are accepted");
     }
     setApplyingId(applyTarget._id);
     setError('');

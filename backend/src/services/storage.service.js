@@ -48,12 +48,12 @@ if (STORAGE_TYPE === 's3') {
 const localStorage = multer.diskStorage({
   destination: (req, file, cb) => {
     let subDir;
-    if (file.mimetype === 'text/plain') {
+    if (file.fieldname === 'resume' || ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'].includes(file.mimetype)) {
+      subDir = 'resumes';
+    } else if (file.mimetype === 'text/plain') {
       subDir = 'transcripts';
     } else if (file.mimetype.startsWith('audio')) {
       subDir = 'audio';
-    } else if (['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'].includes(file.mimetype)) {
-      subDir = 'resumes';
     } else {
       subDir = 'recordings';
     }
@@ -74,8 +74,8 @@ const s3Storage = (STORAGE_TYPE === 's3' && s3) ? multerS3({
     cb(null, { fieldName: file.fieldname });
   },
   key: (req, file, cb) => {
-    const subDir = file.mimetype === 'text/plain' ? 'transcripts' : 
-                   ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'].includes(file.mimetype) ? 'resumes' :
+    const subDir = (file.fieldname === 'resume' || ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'].includes(file.mimetype)) ? 'resumes' :
+                   file.mimetype === 'text/plain' ? 'transcripts' : 
                    file.mimetype.startsWith('audio') ? 'audio' : 'recordings';
     const ext = path.extname(file.originalname) || '';
     const key = `${subDir}/${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`;
