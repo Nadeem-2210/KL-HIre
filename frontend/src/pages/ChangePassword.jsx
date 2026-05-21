@@ -14,6 +14,9 @@ const ChangePassword = () => {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showCurrentPw, setShowCurrentPw] = useState(false);
+  const [showNewPw, setShowNewPw] = useState(false);
+  const [showConfirmPw, setShowConfirmPw] = useState(false);
 
   const labelStyle = {
     fontWeight: 600, fontSize: '0.8rem', display: 'block',
@@ -92,40 +95,91 @@ const ChangePassword = () => {
         {success && <div className="alert alert-success" style={{ marginBottom: 16 }}>✓ {success}</div>}
 
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {/* Temporary Password */}
           <div>
             <label style={labelStyle}>Temporary Password *</label>
-            <input
-              style={inputStyle}
-              type="password"
-              placeholder="Enter your temporary password"
-              value={form.currentPassword}
-              onChange={e => setForm(f => ({ ...f, currentPassword: e.target.value }))}
-              required
-            />
+            <div style={{ position: 'relative' }}>
+              <input
+                style={{ ...inputStyle, paddingRight: 42 }}
+                type={showCurrentPw ? 'text' : 'password'}
+                placeholder="Enter your temporary password"
+                value={form.currentPassword}
+                onChange={e => setForm(f => ({ ...f, currentPassword: e.target.value }))}
+                required
+                autoComplete="current-password"
+              />
+              <button
+                type="button"
+                onClick={() => setShowCurrentPw(v => !v)}
+                tabIndex={-1}
+                aria-label={showCurrentPw ? 'Hide password' : 'Show password'}
+                style={{
+                  position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)',
+                  background: 'none', border: 'none', cursor: 'pointer',
+                  color: 'var(--text-muted)', fontSize: '1.1rem', padding: '2px 4px', lineHeight: 1,
+                }}
+              >
+                {showCurrentPw ? '🙈' : '👁️'}
+              </button>
+            </div>
           </div>
 
+          {/* New Password */}
           <div>
             <label style={labelStyle}>New Password *</label>
-            <input
-              style={inputStyle}
-              type="password"
-              placeholder="Min. 6 characters"
-              value={form.newPassword}
-              onChange={e => setForm(f => ({ ...f, newPassword: e.target.value }))}
-              required
-            />
+            <div style={{ position: 'relative' }}>
+              <input
+                style={{ ...inputStyle, paddingRight: 42 }}
+                type={showNewPw ? 'text' : 'password'}
+                placeholder="Min. 6 characters"
+                value={form.newPassword}
+                onChange={e => setForm(f => ({ ...f, newPassword: e.target.value }))}
+                required
+                autoComplete="new-password"
+              />
+              <button
+                type="button"
+                onClick={() => setShowNewPw(v => !v)}
+                tabIndex={-1}
+                aria-label={showNewPw ? 'Hide password' : 'Show password'}
+                style={{
+                  position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)',
+                  background: 'none', border: 'none', cursor: 'pointer',
+                  color: 'var(--text-muted)', fontSize: '1.1rem', padding: '2px 4px', lineHeight: 1,
+                }}
+              >
+                {showNewPw ? '🙈' : '👁️'}
+              </button>
+            </div>
           </div>
 
+          {/* Confirm New Password */}
           <div>
             <label style={labelStyle}>Confirm New Password *</label>
-            <input
-              style={inputStyle}
-              type="password"
-              placeholder="Re-enter new password"
-              value={form.confirmPassword}
-              onChange={e => setForm(f => ({ ...f, confirmPassword: e.target.value }))}
-              required
-            />
+            <div style={{ position: 'relative' }}>
+              <input
+                style={{ ...inputStyle, paddingRight: 42 }}
+                type={showConfirmPw ? 'text' : 'password'}
+                placeholder="Re-enter new password"
+                value={form.confirmPassword}
+                onChange={e => setForm(f => ({ ...f, confirmPassword: e.target.value }))}
+                required
+                autoComplete="new-password"
+              />
+              <button
+                type="button"
+                onClick={() => setShowConfirmPw(v => !v)}
+                tabIndex={-1}
+                aria-label={showConfirmPw ? 'Hide password' : 'Show password'}
+                style={{
+                  position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)',
+                  background: 'none', border: 'none', cursor: 'pointer',
+                  color: 'var(--text-muted)', fontSize: '1.1rem', padding: '2px 4px', lineHeight: 1,
+                }}
+              >
+                {showConfirmPw ? '🙈' : '👁️'}
+              </button>
+            </div>
           </div>
 
           <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
